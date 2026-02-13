@@ -1,4 +1,4 @@
-module github.com/petar-djukic/mage-claude-orchestrator
+module github.com/mesh-intelligence/mage-claude-orchestrator
 
 go 1.25.7
 

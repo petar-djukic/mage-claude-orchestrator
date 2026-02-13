@@ -119,7 +119,7 @@ In your consuming project's Magefile:
 ```go
 package main
 
-import orchestrator "github.com/petar-djukic/mage-claude-orchestrator"
+import orchestrator "github.com/mesh-intelligence/mage-claude-orchestrator"
 
 var o *orchestrator.Orchestrator
 

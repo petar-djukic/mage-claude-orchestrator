@@ -1,4 +1,12 @@
 # Make Work
+{{- if .ProjectRules}}
+
+## Project Rules
+
+The following project rules apply to this codebase:
+
+{{.ProjectRules}}
+{{- end}}
 
 Read VISION.md, ARCHITECTURE.md, road-map.yaml, docs/specs/product-requirements/, docs/specs/use-cases/, docs/specs/test-suites/, and docs/engineering/ if they exist.
 

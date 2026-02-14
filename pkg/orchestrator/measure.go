@@ -279,6 +279,7 @@ type MeasurePromptData struct {
 	UserInput      string
 	LinesMin       int
 	LinesMax       int
+	ProjectRules   string
 }
 
 func (o *Orchestrator) buildMeasurePrompt(userInput, existingIssues string, limit int, outputPath string) string {
@@ -296,6 +297,7 @@ func (o *Orchestrator) buildMeasurePrompt(userInput, existingIssues string, limi
 		UserInput:      userInput,
 		LinesMin:       o.cfg.EstimatedLinesMin,
 		LinesMax:       o.cfg.EstimatedLinesMax,
+		ProjectRules:   collectProjectRules("."),
 	}
 
 	logf("buildMeasurePrompt: existingIssues=%d limit=%d userInput=%v",

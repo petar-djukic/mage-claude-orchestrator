@@ -395,10 +395,11 @@ func createWorktree(task stitchTask) error {
 
 // StitchPromptData is the template data for the stitch prompt.
 type StitchPromptData struct {
-	Title       string
-	ID          string
-	IssueType   string
-	Description string
+	Title        string
+	ID           string
+	IssueType    string
+	Description  string
+	ProjectRules string
 }
 
 func (o *Orchestrator) buildStitchPrompt(task stitchTask) string {
@@ -408,10 +409,11 @@ func (o *Orchestrator) buildStitchPrompt(task stitchTask) string {
 	}
 	tmpl := template.Must(template.New("stitch").Parse(tmplStr))
 	data := StitchPromptData{
-		Title:       task.title,
-		ID:          task.id,
-		IssueType:   task.issueType,
-		Description: task.description,
+		Title:        task.title,
+		ID:           task.id,
+		IssueType:    task.issueType,
+		Description:  task.description,
+		ProjectRules: collectProjectRules(task.worktreeDir),
 	}
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {

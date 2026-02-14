@@ -2,6 +2,16 @@
 
 **Task ID:** {{.ID}}
 **Type:** {{.IssueType}}
+{{- if .ProjectRules}}
+
+---
+
+## Project Rules
+
+The following project rules apply to this codebase:
+
+{{.ProjectRules}}
+{{- end}}
 
 ### Description
 

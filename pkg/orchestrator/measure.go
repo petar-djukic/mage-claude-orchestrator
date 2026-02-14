@@ -25,6 +25,8 @@ func (o *Orchestrator) Measure() error {
 }
 
 // RunMeasure runs the measure workflow using Config settings.
+// It creates a beads tracking issue before invoking Claude and closes it
+// afterward with invocation metrics (duration, tokens, LOC).
 func (o *Orchestrator) RunMeasure() error {
 	measureStart := time.Now()
 	logf("measure: starting")
@@ -64,13 +66,18 @@ func (o *Orchestrator) RunMeasure() error {
 		os.Remove(f)
 	}
 
-	// Get existing issues.
+	// Get existing issues and current commit.
 	logf("measure: querying existing issues via bd list")
 	existingIssues := getExistingIssues()
-
 	issueCount := countJSONArray(existingIssues)
-	logf("measure: found %d existing issue(s), maxMeasureIssues=%d", issueCount, o.cfg.MaxMeasureIssues)
+	commitSHA, _ := gitRevParseHEAD()
+
+	logf("measure: found %d existing issue(s), maxMeasureIssues=%d, commit=%s",
+		issueCount, o.cfg.MaxMeasureIssues, commitSHA)
 	logf("measure: outputFile=%s", outputFile)
+
+	// Create a beads tracking issue for this measure invocation.
+	trackingID := o.createMeasureTrackingIssue(branch, commitSHA, issueCount)
 
 	// Snapshot LOC before Claude.
 	locBefore := o.captureLOC()
@@ -85,6 +92,7 @@ func (o *Orchestrator) RunMeasure() error {
 	tokens, err := o.runClaude(prompt, "", o.cfg.Silence())
 	if err != nil {
 		logf("measure: Claude failed after %s: %v", time.Since(claudeStart).Round(time.Second), err)
+		o.closeMeasureTrackingIssue(trackingID, claudeStart, measureStart, tokens, locBefore, o.captureLOC(), 0, err)
 		return fmt.Errorf("running Claude: %w", err)
 	}
 	claudeDuration := time.Since(claudeStart)
@@ -92,15 +100,15 @@ func (o *Orchestrator) RunMeasure() error {
 
 	// Snapshot LOC after Claude (measure doesn't change code, but record for consistency).
 	locAfter := o.captureLOC()
-    
+
 	// Import proposed issues.
 	if _, statErr := os.Stat(outputFile); statErr != nil {
 		logf("measure: output file not found at %s (Claude may not have written it)", outputFile)
+		o.closeMeasureTrackingIssue(trackingID, claudeStart, measureStart, tokens, locBefore, locAfter, 0, nil)
 		return nil
 	}
 
 	fileInfo, _ := os.Stat(outputFile)
-
 	logf("measure: output file found, size=%d bytes", fileInfo.Size())
 
 	logf("measure: importing issues from %s", outputFile)
@@ -108,6 +116,7 @@ func (o *Orchestrator) RunMeasure() error {
 	createdIDs, err := o.importIssues(outputFile)
 	if err != nil {
 		logf("measure: import failed after %s: %v", time.Since(importStart).Round(time.Second), err)
+		o.closeMeasureTrackingIssue(trackingID, claudeStart, measureStart, tokens, locBefore, locAfter, 0, err)
 		return fmt.Errorf("importing issues: %w", err)
 	}
 	logf("measure: imported %d issue(s) in %s", len(createdIDs), time.Since(importStart).Round(time.Second))
@@ -132,8 +141,86 @@ func (o *Orchestrator) RunMeasure() error {
 		os.Remove(outputFile)
 	}
 
+	// Close tracking issue with final metrics.
+	o.closeMeasureTrackingIssue(trackingID, claudeStart, measureStart, tokens, locBefore, locAfter, len(createdIDs), nil)
+
 	logf("measure: completed in %s", time.Since(measureStart).Round(time.Second))
 	return nil
+}
+
+// createMeasureTrackingIssue creates a beads issue to track the measure
+// invocation. The description includes the branch, commit SHA, and number
+// of existing issues being analyzed. Returns the issue ID or "" on failure.
+func (o *Orchestrator) createMeasureTrackingIssue(branch, commitSHA string, existingIssueCount int) string {
+	title := fmt.Sprintf("measure: plan on %s at %s", branch, truncateSHA(commitSHA))
+	description := fmt.Sprintf(
+		"Measure invocation.\n\nBranch: %s\nCommit: %s\nExisting issues: %d\nMax new issues: %d",
+		branch, commitSHA, existingIssueCount, o.cfg.MaxMeasureIssues,
+	)
+
+	out, err := bdCreateTask(title, description)
+	if err != nil {
+		logf("createMeasureTrackingIssue: bd create failed: %v", err)
+		return ""
+	}
+
+	var created struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(out, &created); err != nil || created.ID == "" {
+		logf("createMeasureTrackingIssue: parse failed: %v", err)
+		return ""
+	}
+
+	logf("measure: tracking issue created: %s", created.ID)
+
+	// Claim the issue immediately.
+	if err := bdUpdateStatus(created.ID, "in_progress"); err != nil {
+		logf("createMeasureTrackingIssue: status update warning: %v", err)
+	}
+	o.beadsCommit(fmt.Sprintf("Open measure tracking issue %s", created.ID))
+
+	return created.ID
+}
+
+// closeMeasureTrackingIssue records invocation metrics and closes the
+// tracking issue. If trackingID is empty, this is a no-op.
+func (o *Orchestrator) closeMeasureTrackingIssue(trackingID string, claudeStart, measureStart time.Time, tokens ClaudeResult, locBefore, locAfter LocSnapshot, issuesCreated int, claudeErr error) {
+	if trackingID == "" {
+		return
+	}
+
+	rec := InvocationRecord{
+		Caller:    "measure",
+		StartedAt: claudeStart.UTC().Format(time.RFC3339),
+		DurationS: int(time.Since(measureStart).Seconds()),
+		Tokens:    claudeTokens{Input: tokens.InputTokens, Output: tokens.OutputTokens},
+		LOCBefore: locBefore,
+		LOCAfter:  locAfter,
+	}
+	recordInvocation(trackingID, rec)
+
+	// Add a summary comment.
+	status := "success"
+	if claudeErr != nil {
+		status = fmt.Sprintf("failed: %v", claudeErr)
+	}
+	summary := fmt.Sprintf("issues_created: %d, status: %s", issuesCreated, status)
+	_ = bdCommentAdd(trackingID, summary)
+
+	if err := bdClose(trackingID); err != nil {
+		logf("closeMeasureTrackingIssue: bd close warning: %v", err)
+	}
+	o.beadsCommit(fmt.Sprintf("Close measure tracking issue %s", trackingID))
+}
+
+// truncateSHA returns the first 8 characters of a SHA, or the full
+// string if shorter.
+func truncateSHA(sha string) string {
+	if len(sha) > 8 {
+		return sha[:8]
+	}
+	return sha
 }
 
 func getExistingIssues() string {

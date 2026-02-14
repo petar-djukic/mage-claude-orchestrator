@@ -219,12 +219,23 @@ func (o *Orchestrator) runClaude(prompt, dir string, silence bool) (ClaudeResult
 }
 
 // buildPodmanCmd constructs the exec.Cmd for running Claude inside a
-// podman container.
+// podman container. It mounts the working directory and the credential
+// file so Claude Code can authenticate.
 func (o *Orchestrator) buildPodmanCmd(ctx context.Context, workDir string) *exec.Cmd {
 	args := []string{"run", "--rm", "-i",
 		"-v", workDir + ":" + workDir,
 		"-w", workDir,
 	}
+
+	// Mount credentials into the container at the path Claude Code expects.
+	credPath := filepath.Join(o.cfg.SecretsDir, o.cfg.EffectiveTokenFile())
+	if absCredPath, err := filepath.Abs(credPath); err == nil {
+		if _, err := os.Stat(absCredPath); err == nil {
+			args = append(args,
+				"-v", absCredPath+":/home/crumbs/.claude/.credentials.json:ro")
+		}
+	}
+
 	args = append(args, o.cfg.PodmanArgs...)
 	args = append(args, o.cfg.PodmanImage)
 	args = append(args, binClaude)

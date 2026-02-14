@@ -2,47 +2,55 @@
 
 # Command: Test Clone
 
-Clone a repository into an isolated directory, install the orchestrator's mage infrastructure, and run the test suite. Monitor failures, fix code, and re-run until all tests pass. Delete the directory when done.
+Test the orchestrator library by deploying it into a cloned Go repository and running the test plan. The orchestrator manages the target project through mage targets. Failures indicate bugs in the orchestrator code, which get fixed in this repository.
 
 ## Arguments
 
-$ARGUMENTS is the Git repository URL or local path to clone. If a second argument is provided, it is the branch or ref to check out after cloning.
+$ARGUMENTS is the Git repository URL or local path of the target Go project. If a second argument is provided, it is the branch or ref to check out before stripping history.
 
 Examples:
 - `/test-clone https://github.com/org/project`
 - `/test-clone /path/to/local/repo`
 - `/test-clone https://github.com/org/project feature-branch`
 
+## Context
+
+This repository (`mage-claude-orchestrator`) is a Go library that other projects import into their magefiles. The test plan (`test-plan.yaml` at this repo's root) defines test cases that exercise the orchestrator's mage targets (init, reset, build, generator lifecycle, cobbler workflows, etc.) against a consuming project.
+
+The orchestrator repo root is: the current working directory when the skill is invoked.
+
 ## Workflow
 
-### 1. Parse arguments
+### 1. Read the test plan
 
-Extract the repository URL (first argument) and optional branch (second argument) from `$ARGUMENTS`. If no arguments are provided, ask the user for the repository URL.
+Read `test-plan.yaml` from the orchestrator repo root. Parse the preconditions and test cases. Identify which tests require Claude (sections 5, 7, 8) and which can run without it (sections 1-4, 6).
 
 ### 2. Create isolated workspace
 
 ```bash
+ORCH_ROOT="$(pwd)"
 WORK_DIR=$(mktemp -d -t test-clone-XXXXXX)
+echo "Orchestrator root: $ORCH_ROOT"
 echo "Test workspace: $WORK_DIR"
 ```
 
-### 3. Clone the repository
+### 3. Clone the target repository
 
 ```bash
 git clone <repo-url> "$WORK_DIR/repo"
-cd "$WORK_DIR/repo"
 ```
 
-If a branch was specified, check it out:
+If a branch was specified, check it out before stripping history:
 ```bash
-git checkout <branch>
+cd "$WORK_DIR/repo" && git checkout <branch>
 ```
 
 ### 4. Strip git history and initialize fresh repository
 
-Remove the cloned git history and create a clean single-commit repo. This ensures the orchestrator's git-based operations (generation branches, tags, worktrees) start from a known state without interference from the upstream history.
+The orchestrator's git operations (generation branches, tags, worktrees) need a clean starting state.
 
 ```bash
+cd "$WORK_DIR/repo"
 rm -rf .git
 git init
 git add -A
@@ -51,111 +59,223 @@ git commit -m "Initial commit from test-clone"
 
 ### 5. Install mage and orchestrator actions
 
-Ensure the mage build tool is available:
+#### 5a. Ensure mage is available
 
 ```bash
 which mage || go install github.com/magefile/mage@latest
 ```
 
-The cloned repository should have a `magefiles/` directory that imports the orchestrator library (`github.com/mesh-intelligence/mage-claude-orchestrator/pkg/orchestrator`). Point the dependency at the local development checkout so the tests exercise the current orchestrator code:
+#### 5b. Detect the target project
 
-```bash
-ORCHESTRATOR_DIR="$(pwd)"  # save for later — this is the orchestrator repo root
-cd "$WORK_DIR/repo"
+Read the target repo's `go.mod` to extract the module path. Scan for a main package (look for `package main` in `cmd/` or root). Identify Go source directories.
+
+#### 5c. Create magefiles
+
+If the target repo already has `magefiles/` that import the orchestrator, skip to 5d.
+
+Otherwise, create `magefiles/` with targets that wire up the orchestrator. The magefiles must expose every target tested in `test-plan.yaml`.
+
+Create `magefiles/magefile.go`:
+
+```go
+//go:build mage
+
+package main
+
+import (
+    "fmt"
+    "os"
+    "os/exec"
+
+    "github.com/mesh-intelligence/mage-claude-orchestrator/pkg/orchestrator"
+)
+
+var o *orchestrator.Orchestrator
+
+func init() {
+    var err error
+    o, err = orchestrator.NewFromFile("configuration.yaml")
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "config error: %v\n", err)
+        os.Exit(1)
+    }
+}
+
+func Init() error    { return o.Init() }
+func Reset() error   { return o.FullReset() }
+func Stats() error   { return o.Stats() }
+
+func Build() error {
+    cmd := exec.Command("go", "build", "-o", "bin/"+binaryName(), mainPkg())
+    cmd.Stdout = os.Stdout
+    cmd.Stderr = os.Stderr
+    return cmd.Run()
+}
+
+func Lint() error {
+    cmd := exec.Command("golangci-lint", "run", "./...")
+    cmd.Stdout = os.Stdout
+    cmd.Stderr = os.Stderr
+    return cmd.Run()
+}
+
+func Install() error {
+    cmd := exec.Command("go", "install", mainPkg())
+    cmd.Stdout = os.Stdout
+    cmd.Stderr = os.Stderr
+    return cmd.Run()
+}
+
+func Clean() error {
+    return os.RemoveAll("bin/")
+}
+
+// binaryName and mainPkg read from the orchestrator config.
+// Adjust these based on the target project's configuration.yaml.
+func binaryName() string { return o.Config().BinaryName }
+func mainPkg() string    { return o.Config().MainPackage }
 ```
 
-If the repo's `magefiles/go.mod` (or root `go.mod`) references the orchestrator module, add a replace directive:
+Create namespace files for sub-targets (`magefiles/cobbler.go`, `magefiles/beads.go`, `magefiles/generator.go`, `magefiles/test.go`) that expose the orchestrator methods as mage namespace targets (e.g., `type Cobbler mg.Namespace`).
+
+Adapt the magefiles to match the target project's structure. The test-plan.yaml expects these targets at minimum:
+
+| Target | Orchestrator method |
+|--------|---------------------|
+| init | Orchestrator.Init() |
+| reset | Orchestrator.FullReset() |
+| stats | Orchestrator.Stats() |
+| cobbler:reset | Orchestrator.CobblerReset() |
+| cobbler:measure | Orchestrator.RunMeasure() |
+| beads:init | Orchestrator.BeadsInit() |
+| beads:reset | Orchestrator.BeadsReset() |
+| generator:start | Orchestrator.GeneratorStart() |
+| generator:stop | Orchestrator.GeneratorStop() |
+| generator:run | Orchestrator.GeneratorRun() |
+| generator:resume | Orchestrator.GeneratorResume() |
+| generator:list | Orchestrator.GeneratorList() |
+| generator:reset | Orchestrator.GeneratorReset() |
+
+Build, lint, test, install, and clean targets call standard Go tooling using paths from configuration.yaml.
+
+#### 5d. Create or update configuration.yaml
+
+If the target repo does not have a `configuration.yaml`, create one using `orchestrator.WriteDefaultConfig()` logic, then fill in the detected project-specific fields:
+
+- `module_path` — from the target's go.mod
+- `binary_name` — from the main package or directory name
+- `main_package` — detected cmd/ path
+- `go_source_dirs` — directories containing .go files (e.g., cmd/, pkg/, internal/)
+- `binary_dir` — "bin"
+- `magefiles_dir` — "magefiles"
+- `spec_globs` — point at any docs/ if present
+- `seed_files` — empty for test purposes
+- `version_file` — point at a file with `const Version = "..."` if one exists
+
+#### 5e. Wire up the orchestrator dependency
+
+Point the magefiles' go.mod at the local orchestrator checkout:
 
 ```bash
-# In whichever go.mod imports the orchestrator
-go mod edit -replace github.com/mesh-intelligence/mage-claude-orchestrator=<path-to-local-orchestrator-checkout>
+cd "$WORK_DIR/repo/magefiles"
+go mod edit -replace "github.com/mesh-intelligence/mage-claude-orchestrator=$ORCH_ROOT"
 go mod tidy
 ```
 
-Verify mage can discover targets:
+If the target repo uses a root go.mod instead of magefiles/go.mod, apply the replace there.
+
+#### 5f. Verify mage discovers targets
 
 ```bash
+cd "$WORK_DIR/repo"
 mage -l
 ```
 
-If the repository does not have magefiles, report this to the user and stop — the test-clone skill requires a project that uses the orchestrator's mage targets.
+All targets from the test plan must appear. If any are missing, fix the magefiles before proceeding.
 
-### 6. Run initial commit and verify build
+### 6. Satisfy preconditions
 
-Before running the full test suite, ensure the project compiles:
+Verify each precondition from test-plan.yaml:
 
-```bash
-mage build
-```
+- On main branch with clean working tree — already done by step 4
+- bd CLI available on PATH — check `which bd`; if missing, report and stop
+- mage available — verified in step 5a
+- configuration.yaml present — created in step 5d
 
-If this fails, fix the build errors first before proceeding to tests.
+### 7. Run test cases (sections 1-4, 6 — no Claude required)
 
-### 7. Run the test suite
+Execute each test case from test-plan.yaml in order. For each test case:
 
-Execute the test targets in order. Track which targets pass and which fail.
+1. Run the setup commands
+2. Run the command
+3. Check the expected exit code
+4. Verify the expected state (directory existence, branch names, file contents, stdout)
+5. Run cleanup: `mage reset` between tests to return to a clean state
 
-```bash
-mage lint
-mage test:unit
-mage test:integration
-mage test:all
-```
+Track results:
 
-If the project has a `test-plan.yaml` at the root, read it and use it as the authoritative list of test cases. Run each test case from the plan.
+| # | Test name | Result | Notes |
+|---|-----------|--------|-------|
+| 1 | ...       | PASS/FAIL | ... |
 
-If the project has a `mage test:cobbler` or `mage test:generator` target (integration tests requiring Claude), skip them by default. Only run them if the user explicitly requested Claude-dependent tests.
+Skip sections 5, 7, and 8 (require Claude) unless the user explicitly requested them.
 
-### 8. Fix failures and re-run
+### 8. Fix failures
 
-For each failing test:
+When a test fails, the bug is in the orchestrator library code, not the target project.
 
-1. Read the error output carefully
-2. Identify the root cause (compilation error, logic bug, missing dependency, config issue)
-3. Fix the code in `$WORK_DIR/repo`
-4. Commit the fix: `git add -A && git commit -m "Fix: <description>"`
-5. Re-run the failing test to verify the fix
-6. Continue to the next failure
+1. Read the error output
+2. Identify the root cause in `$ORCH_ROOT/pkg/orchestrator/`
+3. Read the relevant orchestrator source file
+4. Fix the orchestrator code **in the orchestrator repo** (`$ORCH_ROOT`)
+5. The go.mod replace ensures the target repo picks up the fix immediately
+6. Re-run the failing test in `$WORK_DIR/repo` to verify
+7. Commit the fix in `$ORCH_ROOT`: `cd "$ORCH_ROOT" && git add -A && git commit -m "Fix: <description>"`
 
-Repeat the full test suite after fixing individual failures to catch regressions. The loop continues until ALL test targets pass.
+Repeat until the test passes. If the fix breaks other tests, revert and try a different approach.
 
-Keep a running log of fixes applied:
+Keep a running log:
 
-| Fix # | Test | Root cause | Files changed |
-|-------|------|------------|---------------|
-| 1     | ...  | ...        | ...           |
+| Fix # | Test | Root cause | Orchestrator file | Change |
+|-------|------|------------|-------------------|--------|
+| 1     | ...  | ...        | ...               | ...    |
 
-### 9. Report results
+If a failure is caused by misconfiguration in the target workspace (not an orchestrator bug), fix it in `$WORK_DIR/repo` instead and note it as a setup issue, not an orchestrator fix.
 
-After all tests pass, summarize:
+### 9. Re-run full suite
 
-1. Total tests run and passed
-2. Number of fixes applied
-3. Table of fixes (from step 8)
-4. Final `mage stats` output if available
+After fixing individual failures, re-run ALL test cases from sections 1-4 and 6 to catch regressions. Repeat the fix cycle if new failures appear.
 
-### 10. Clean up
+### 10. Report results
 
-Delete the isolated workspace:
+Summarize:
+
+1. Target repository and branch tested
+2. Total test cases: run / passed / failed / skipped
+3. Table of fixes applied to the orchestrator (from step 8)
+4. Any tests skipped (Claude-dependent sections, unfixable tests)
+5. `mage stats` output from the target workspace
+
+### 11. Clean up
 
 ```bash
 rm -rf "$WORK_DIR"
-echo "Test workspace cleaned up"
 ```
 
-Report to the user that the test run is complete and the workspace has been deleted.
+Report that the workspace has been deleted. Orchestrator fixes remain committed in `$ORCH_ROOT`.
 
 ## Error handling
 
 - If the clone fails, report the error and stop
-- If mage cannot be installed, report the error and stop
-- If the repo has no magefiles, report this and stop
-- If a fix introduces new failures, revert the fix and try a different approach
-- If you cannot fix a test after 3 attempts, log it as unfixable, skip it, and continue with other tests. Report all unfixable tests in the final summary.
-- If you need to make changes to the orchestrator library (not just the cloned project), note this in the summary but do NOT modify the orchestrator source. The fix should go into the cloned project only.
+- If mage or bd cannot be installed, report and stop
+- If a fix introduces new failures, revert and try a different approach
+- If you cannot fix a test after 3 attempts, log it as unfixable, skip it, and continue. Report all unfixable tests in the final summary.
+- If you need to modify the target project's magefiles or config (not the orchestrator), do so in `$WORK_DIR/repo` and note it as a setup adjustment.
 
 ## Important
 
-- All work happens inside `$WORK_DIR`. Do not modify files outside the workspace.
-- The orchestrator source (this repository) is read-only during the test run.
+- Orchestrator fixes go into THIS repo (`$ORCH_ROOT`). Commit them here.
+- Target workspace setup (magefiles, config) lives in `$WORK_DIR/repo`. It is ephemeral.
+- The go.mod replace directive ensures the target always uses the local orchestrator source.
 - Do not push any changes. Everything is local.
-- The workspace is ephemeral — it will be deleted at the end.
+- Do not run Claude-dependent tests (sections 5, 7, 8) unless explicitly requested.

@@ -27,6 +27,31 @@ releases:
         summary: Generation resume with stale task recovery
         status: done
 
+  - version: "02.0"
+    name: VS Code Extension
+    status: not started
+    description: |
+      VS Code extension for generation tracking, lifecycle management,
+      branch comparison, issue visualization, and metrics dashboards.
+      Provides editor-integrated visibility into orchestrator state
+      without leaving VS Code.
+    use_cases:
+      - id: rel02.0-uc001-lifecycle-commands
+        summary: Lifecycle commands (start, run, resume, stop, reset, switch) via integrated terminal
+        status: not started
+      - id: rel02.0-uc002-generation-browser
+        summary: Tree view listing generations with lifecycle state and version tags
+        status: not started
+      - id: rel02.0-uc003-branch-comparison
+        summary: Tag-to-tag and generation-to-generation diff views
+        status: not started
+      - id: rel02.0-uc004-issue-tracker-view
+        summary: Beads issue tree with status grouping and InvocationRecord display
+        status: not started
+      - id: rel02.0-uc005-metrics-dashboard
+        summary: Webview panel aggregating token usage, LOC progression, and diff stats
+        status: not started
+
   - version: "99.0"
     name: Unscheduled
     status: not started

@@ -1,0 +1,119 @@
+id: prd006-vscode-extension
+title: VS Code Extension for Generation Tracking and Lifecycle Management
+
+problem: |
+  The orchestrator runs generation cycles from the terminal via mage
+  targets. Developers must switch between terminal, git log, and beads
+  CLI to understand what state a generation is in, what issues exist,
+  how branches compare, and what metrics each invocation produced.
+  Without an integrated view inside the editor, situational awareness
+  requires constant context-switching and manual git/beads queries.
+
+goals:
+  - G1: Provide real-time visibility into generation lifecycle state from within VS Code
+  - G2: Enable comparison between version tags and between generation branches
+  - G3: Surface beads issue status, dependencies, and invocation metrics inside the editor
+  - G4: Allow lifecycle management (start, run, resume, stop, reset, switch) without leaving VS Code
+
+requirements:
+  R1:
+    title: Generation Lifecycle Commands
+    items:
+      - R1.1: The extension must register VS Code commands for GeneratorStart, GeneratorRun, GeneratorResume, GeneratorStop, GeneratorReset, and GeneratorSwitch
+      - R1.2: Each command must execute the corresponding mage target (e.g., mage generator:start) in a VS Code integrated terminal
+      - R1.3: GeneratorSwitch must prompt the user with a quick-pick list of available generation branches before executing
+      - R1.4: Commands that alter state (start, stop, reset) must show a confirmation dialog before executing
+      - R1.5: The extension must refresh all views after a lifecycle command completes
+      - R1.6: The extension must disable lifecycle commands that are invalid for the current state (e.g., disable start when already on a generation branch)
+
+  R2:
+    title: Generation Browser Tree View
+    items:
+      - R2.1: The extension must provide a TreeDataProvider for the mageOrchestrator.status view
+      - R2.2: The tree must list all generations discovered from git tags matching the pattern {GenPrefix}*-start
+      - R2.3: Each generation node must display its lifecycle state derived from tag suffixes (-start, -finished, -merged, -abandoned)
+      - R2.4: Each generation node must show the version tag (v[REL].[DATE].[REVISION]) if one exists for that generation
+      - R2.5: The current generation (matching the active git branch) must be visually distinguished with an icon or label decorator
+      - R2.6: Clicking a generation node must reveal child nodes showing the lifecycle tags and version tags associated with that generation
+      - R2.7: The tree must include a context menu action to switch to a generation branch
+      - R2.8: The tree must include a context menu action to compare two selected generations (see R3)
+      - R2.9: The tree must refresh when git refs change (via a FileSystemWatcher on .git/refs/)
+
+  R3:
+    title: Branch and Tag Comparison
+    items:
+      - R3.1: The extension must register a command to compare two version tags
+      - R3.2: The command must prompt the user to select two tags from a quick-pick list of all v[REL].[DATE].[REVISION] tags
+      - R3.3: The comparison must display a file-level summary showing added, modified, and deleted files between the two refs
+      - R3.4: Each file in the summary must be clickable to open a VS Code diff editor showing the file-level changes between the two refs
+      - R3.5: The extension must support comparing two generation branches by resolving each generation to its branch ref
+      - R3.6: The comparison view must use a TreeDataProvider showing changed files grouped by directory
+
+  R4:
+    title: Issue Tracker Tree View
+    items:
+      - R4.1: The extension must provide a TreeDataProvider for the mageOrchestrator.issues view
+      - R4.2: The tree must parse .beads/issues.jsonl to list all issues
+      - R4.3: Issues must be grouped by status (open, in_progress, closed) with each group as a collapsible parent node
+      - R4.4: Each issue node must display the issue title, type (task/epic), and ID
+      - R4.5: Clicking an issue node must reveal child nodes showing description, dependencies, and comments
+      - R4.6: The tree must display InvocationRecord data from issue comments as formatted child nodes (tokens, LOC delta, duration, diff stats)
+      - R4.7: The tree must refresh automatically when .beads/issues.jsonl changes (via FileSystemWatcher)
+      - R4.8: The tree must include a context menu action to open the issue in a read-only editor panel with full details
+
+  R5:
+    title: Metrics Dashboard
+    items:
+      - R5.1: The extension must register a command to show a metrics dashboard as a VS Code webview panel
+      - R5.2: The dashboard must aggregate InvocationRecord data from all issue comments in .beads/issues.jsonl
+      - R5.3: The dashboard must display total and per-invocation token usage (input and output tokens)
+      - R5.4: The dashboard must display LOC progression (production and test lines before and after each invocation)
+      - R5.5: The dashboard must display diff statistics (files changed, insertions, deletions) per invocation
+      - R5.6: The dashboard must display total generation duration and per-task durations
+      - R5.7: The dashboard must render data using HTML tables or simple charts (no external charting libraries required)
+      - R5.8: The dashboard must refresh when the underlying data changes
+
+  R6:
+    title: Configuration View
+    items:
+      - R6.1: The extension must register a command to open configuration.yaml in the editor
+      - R6.2: The extension must display a summary of active configuration values in the status tree view as a collapsible Config node
+      - R6.3: The Config node must show the values of module_path, binary_name, gen_prefix, cycles, max_stitch_issues, max_measure_issues, and podman_image
+
+  R7:
+    title: Extension Infrastructure
+    items:
+      - R7.1: The extension must activate when the workspace contains a configuration.yaml file (workspaceContains activation event)
+      - R7.2: The extension must use FileSystemWatcher instances to monitor .beads/, .git/refs/, and configuration.yaml for changes
+      - R7.3: The extension must dispose all watchers and terminals on deactivation
+      - R7.4: The extension must handle missing files gracefully (no configuration.yaml, no .beads/ directory, no git tags)
+      - R7.5: The extension must log errors to a dedicated VS Code output channel named Mage Orchestrator
+      - R7.6: The extension must register all commands, tree data providers, and webview panels in the activate function
+      - R7.7: The extension must declare all new commands and views in package.json contributes
+
+non_goals:
+  - This PRD does not define a general-purpose extension reusable by consuming projects
+  - This PRD does not replace the mage CLI as the primary interface
+  - This PRD does not provide real-time streaming of Claude agent output
+  - This PRD does not support generation-vs-main or per-task-branch diffs
+  - This PRD does not define a code review workflow
+  - This PRD does not define automated test execution from the extension
+
+acceptance_criteria:
+  - All six lifecycle commands (start, run, resume, stop, reset, switch) execute the correct mage target in an integrated terminal
+  - Generation browser lists all generations with correct lifecycle state derived from git tags
+  - Tag-to-tag comparison opens a file summary with clickable entries that launch VS Code diff editors
+  - Generation-to-generation comparison resolves branches and shows the same file summary
+  - Issue tracker parses .beads/issues.jsonl and displays issues grouped by status
+  - InvocationRecord metrics appear as formatted child nodes under each issue
+  - Metrics dashboard aggregates and displays token usage, LOC progression, and diff stats
+  - All views refresh automatically when underlying data changes
+  - Extension activates only when configuration.yaml is present in the workspace
+  - Extension handles missing data files without errors
+
+references:
+  - prd001-orchestrator-core
+  - prd002-generation-lifecycle
+  - prd003-cobbler-workflows
+  - prd005-metrics-collection
+  - docs/ARCHITECTURE.md

@@ -1,0 +1,427 @@
+id: test-mage-reset-lifecycle
+title: Mage init/reset target isolation and orchestration
+traces:
+  - eng02-generation-workflow
+
+preconditions:
+  - On main branch with clean working tree
+  - bd CLI available on PATH
+  - mage available (go/bin/mage or PATH)
+  - configuration.yaml present at repository root
+  - "Sections 5, 7, 8 require: Claude CLI on PATH or podman with configured image"
+
+test_cases:
+
+  # ── 1. Individual reset targets (independence) ──
+
+  - name: cobbler:reset only removes .cobbler/
+    inputs:
+      setup:
+        - mkdir -p .cobbler && echo test > .cobbler/dummy.json
+        - mage beads:init
+      command: mage cobbler:reset
+    expected:
+      exit_code: 0
+      state:
+        cobbler_dir_exists: false
+        beads_dir_exists: true
+        generation_branches: unchanged
+
+  - name: beads:reset only touches .beads/
+    inputs:
+      setup:
+        - mage beads:init
+        - mkdir -p .cobbler && echo test > .cobbler/dummy.json
+      command: mage beads:reset
+    expected:
+      exit_code: 0
+      state:
+        beads_dir_exists: true
+        beads_issues_empty: true
+        cobbler_file_exists: true
+
+  - name: beads:reset does not resurrect issues
+    inputs:
+      setup:
+        - mage beads:init
+        - bd create --type task --json "Dummy task" --description "Should not survive reset"
+        - bd list --json
+      command: mage beads:reset
+    expected:
+      exit_code: 0
+      state:
+        beads_issues_empty: true
+      stdout_not_contains: "Dummy task"
+
+  - name: generator:reset only touches branches and Go sources
+    inputs:
+      setup:
+        - mage generator:start
+        - mkdir -p .cobbler && echo test > .cobbler/dummy.json
+      command: mage generator:reset
+    expected:
+      exit_code: 0
+      state:
+        current_branch: main
+        generation_branches: none
+        go_sources_seeded: true
+        cobbler_file_exists: true
+
+  # ── 2. Top-level orchestrators ──
+
+  - name: init is idempotent
+    inputs:
+      setup:
+        - rm -rf .beads/
+      command: mage init && mage init
+    expected:
+      exit_code: 0
+      state:
+        beads_dir_exists: true
+      stdout_contains: "already initialized"
+
+  - name: init creates beads from scratch
+    inputs:
+      setup:
+        - rm -rf .beads/
+      command: mage init
+    expected:
+      exit_code: 0
+      state:
+        beads_dir_exists: true
+
+  - name: reset wipes all artifact types
+    inputs:
+      setup:
+        - mage generator:start
+        - mkdir -p .cobbler && echo test > .cobbler/dummy.json
+      command: mage reset
+    expected:
+      exit_code: 0
+      state:
+        cobbler_dir_exists: false
+        current_branch: main
+        generation_branches: none
+        go_sources_seeded: true
+        beads_dir_exists: true
+        beads_issues_empty: true
+
+  - name: reset calls cobbler, generator, beads in order
+    description: >
+      FullReset calls CobblerReset, GeneratorReset, and BeadsReset
+      sequentially. Verify the git log shows the generator commit
+      before the beads commit.
+    inputs:
+      setup:
+        - mage generator:start
+      command: mage reset
+    expected:
+      exit_code: 0
+      git_log_order:
+        - "Reset beads"
+        - "Generator reset"
+
+  # ── 3. Edge cases ──
+
+  - name: cobbler:reset when .cobbler/ does not exist
+    inputs:
+      setup:
+        - rm -rf .cobbler/
+      command: mage cobbler:reset
+    expected:
+      exit_code: 0
+
+  - name: beads:reset when .beads/ does not exist
+    inputs:
+      setup:
+        - rm -rf .beads/
+      command: mage beads:reset
+    expected:
+      exit_code: 0
+
+  - name: generator:reset when already on main with no branches
+    inputs:
+      setup: []
+      command: mage generator:reset
+    expected:
+      exit_code: 0
+      state:
+        current_branch: main
+        go_sources_seeded: true
+
+  - name: reset from fully clean state
+    inputs:
+      setup:
+        - rm -rf .cobbler/ .beads/
+      command: mage reset
+    expected:
+      exit_code: 0
+
+  # ── 4. Build and test targets ──
+
+  - name: build compiles binary
+    inputs:
+      command: mage build
+    expected:
+      exit_code: 0
+      state:
+        binary_exists: bin/cupboard
+
+  - name: lint passes on clean codebase
+    inputs:
+      command: mage lint
+    expected:
+      exit_code: 0
+
+  - name: test:unit runs without test files
+    inputs:
+      command: mage test:unit
+    expected:
+      exit_code: 0
+      stdout_contains: "no test files"
+
+  - name: test:integration skips when tests/ directory is missing
+    inputs:
+      setup:
+        - rm -rf tests/
+      command: mage test:integration
+    expected:
+      exit_code: 0
+      stdout_contains: "No integration test directory found"
+
+  - name: test:all succeeds with no test files
+    inputs:
+      command: mage test:all
+    expected:
+      exit_code: 0
+
+  - name: install copies binary to GOPATH/bin
+    inputs:
+      command: mage install
+    expected:
+      exit_code: 0
+
+  - name: clean removes build artifacts
+    inputs:
+      setup:
+        - mage build
+      command: mage clean
+    expected:
+      exit_code: 0
+      state:
+        binary_exists: false
+
+  - name: stats outputs JSON with expected fields
+    description: >
+      The library StatsRecord uses spec_words as a map keyed by the
+      labels defined in configuration.yaml spec_globs.
+    inputs:
+      command: mage stats
+    expected:
+      exit_code: 0
+      stdout_json:
+        go_loc: integer
+        go_loc_prod: integer
+        go_loc_test: integer
+        spec_words:
+          prd: integer
+          use_case: integer
+          test_suite: integer
+
+  # ── 5. Cobbler integration (requires Claude) ──
+
+  - name: cobbler:measure creates issues
+    description: >
+      Measure proposes issues (max_measure_issues from config),
+      verify they exist in beads. Set max_measure_issues=1 in
+      configuration.yaml before running.
+    inputs:
+      setup:
+        - mage beads:init
+        - "Set max_measure_issues: 1 in configuration.yaml"
+      command: mage cobbler:measure
+    expected:
+      exit_code: 0
+      state:
+        bd_list_json_length: ">= 1"
+
+  - name: beads:reset clears issues created by measure
+    description: >
+      After measure has created issues, reset beads and verify
+      they are gone.
+    inputs:
+      setup:
+        - mage beads:init
+        - "Set max_measure_issues: 1 in configuration.yaml"
+        - mage cobbler:measure
+      command: mage beads:reset
+    expected:
+      exit_code: 0
+      state:
+        beads_issues_empty: true
+
+  - name: measure creates a tracking issue in beads
+    description: >
+      Measure creates a beads tracking issue before invoking Claude
+      and closes it afterward with invocation metrics. After measure
+      completes, the tracking issue should be closed with a summary
+      comment containing issues_created and status.
+    inputs:
+      setup:
+        - mage beads:init
+        - "Set max_measure_issues: 1 in configuration.yaml"
+      command: mage cobbler:measure
+    expected:
+      exit_code: 0
+      state:
+        bd_closed_issues_contain_title: "measure: plan on"
+
+  - name: test:cobbler runs the full cobbler regression suite
+    description: >
+      The mage test:cobbler target creates an orchestrator with
+      config overrides (max_measure_issues=3, silence=true), measures
+      3 issues, stitches them, and verifies all are closed with no
+      stale branches. This replaces the manual cobbler integration
+      test.
+    inputs:
+      command: mage test:cobbler
+    expected:
+      exit_code: 0
+      stdout_contains: "Cobbler regression test PASSED"
+
+  # ── 6. Generator lifecycle (no Claude) ──
+
+  - name: "start/stop: creates tags and returns to main"
+    description: >
+      Simplest generator lifecycle. Start creates a generation branch
+      and a -start tag. Stop tags -finished, merges into main, tags
+      -merged, and deletes the generation branch. No run in between.
+    inputs:
+      setup:
+        - mage reset
+        - mage generator:start
+        - "BRANCH=$(git rev-parse --abbrev-ref HEAD)"
+      command: mage generator:stop
+    expected:
+      exit_code: 0
+      state:
+        current_branch: main
+        generation_branches: none
+        tags_exist:
+          - "<branch>-start"
+          - "<branch>-finished"
+          - "<branch>-merged"
+
+  - name: "start/stop: generator:list shows merged generation"
+    inputs:
+      setup:
+        - mage reset
+        - mage generator:start
+        - mage generator:stop
+      command: mage generator:list
+    expected:
+      exit_code: 0
+      stdout_contains: "tags: start, finished, merged"
+
+  - name: "start/stop: version file updated on stop"
+    description: >
+      When VersionFile is set in configuration.yaml, GeneratorStop
+      writes the version tag into the version file after creating
+      the git tag. The version constant should match the code tag.
+    inputs:
+      setup:
+        - mage reset
+        - mage generator:start
+      command: mage generator:stop
+    expected:
+      exit_code: 0
+      state:
+        version_file_contains: "v0."
+        git_log_contains: "Set version to v0."
+
+  # ── 7. Generator run (requires Claude) ──
+
+  - name: test:generator runs the full generator lifecycle suite
+    description: >
+      The mage test:generator target runs three progressive tests:
+      (1) start/stop with no Claude, (2) start/run(1 cycle)/stop,
+      and (3) stitch respects per-cycle limit. Config overrides are
+      applied in Go code (silence=true, max_measure_issues=1,
+      max_stitch_issues_per_cycle=2, cycles=1).
+      This replaces the manual generator run tests.
+    inputs:
+      command: mage test:generator
+    expected:
+      exit_code: 0
+      stdout_contains: "Generator lifecycle tests PASSED"
+
+  - name: stitch per-cycle limit triggers measure between batches
+    description: >
+      With 5 ready issues and max_stitch_issues_per_cycle=2,
+      RunCycles should stitch 2, call measure, stitch 2 more,
+      call measure, stitch the last 1. Verify measure is called
+      between stitch batches by checking beads for measure tracking
+      issues.
+    inputs:
+      setup:
+        - mage reset
+        - mage generator:start
+        - "Set max_stitch_issues_per_cycle: 2, max_measure_issues: 0 in configuration.yaml"
+        - "Create 5 ready issues via bd create"
+      command: mage generator:run
+    expected:
+      exit_code: 0
+      state:
+        measure_tracking_issues: ">= 2"
+        all_original_issues_closed: true
+
+  - name: max_stitch_issues caps total iterations
+    description: >
+      With max_stitch_issues=3 and max_stitch_issues_per_cycle=10,
+      RunCycles should stop after 3 total stitch iterations even
+      if open issues remain.
+    inputs:
+      setup:
+        - mage reset
+        - mage generator:start
+        - "Set max_stitch_issues: 3, max_stitch_issues_per_cycle: 10, max_measure_issues: 5 in configuration.yaml"
+      command: mage generator:run
+    expected:
+      state:
+        total_stitched: 3
+        open_issues_remain: true
+
+  # ── 8. Generator resume (requires Claude) ──
+
+  - name: test:resume runs the resume recovery test
+    description: >
+      The mage test:resume target creates a generation, measures 1 issue,
+      switches to main (simulating an interruption), then calls resume.
+      Resume should switch back, clean up, and stitch the pending issue.
+      Config overrides are applied in Go code.
+    inputs:
+      command: mage test:resume
+    expected:
+      exit_code: 0
+      stdout_contains: "Generator resume test PASSED"
+
+  - name: "resume auto-detects generation branch"
+    description: >
+      When only one generation branch exists and the user is on main,
+      resume should auto-detect it without requiring generation_branch
+      in configuration.yaml.
+    inputs:
+      setup:
+        - mage reset
+        - mage generator:start
+        - "Set max_measure_issues: 1 and cycles: 1 in configuration.yaml"
+        - mage cobbler:measure
+        - git checkout main
+      command: mage generator:resume
+    expected:
+      exit_code: 0
+      state:
+        current_branch: "generation-*"
+
+cleanup:
+  - mage reset

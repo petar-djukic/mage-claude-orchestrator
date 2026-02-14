@@ -18,14 +18,20 @@ import (
 const orchestratorModule = "github.com/mesh-intelligence/mage-claude-orchestrator"
 
 // Scaffold sets up a target Go repository to use the orchestrator.
-// It copies the orchestrator.go template, detects project structure,
-// generates configuration.yaml, and wires the Go module dependencies.
+// It copies the orchestrator.go template into magefiles/, detects
+// project structure, generates configuration.yaml, and wires the
+// Go module dependencies.
 func (o *Orchestrator) Scaffold(targetDir, orchestratorRoot string) error {
 	logf("scaffold: targetDir=%s orchestratorRoot=%s", targetDir, orchestratorRoot)
 
-	// 1. Copy orchestrator.go template.
+	mageDir := filepath.Join(targetDir, "magefiles")
+
+	// 1. Copy orchestrator.go template into magefiles/.
+	dst := filepath.Join(mageDir, "orchestrator.go")
+	if _, err := os.Stat(dst); err == nil {
+		return fmt.Errorf("magefiles/orchestrator.go already exists in %s", targetDir)
+	}
 	src := filepath.Join(orchestratorRoot, "orchestrator.go")
-	dst := filepath.Join(targetDir, "orchestrator.go")
 	logf("scaffold: copying %s -> %s", src, dst)
 	if err := copyFile(src, dst); err != nil {
 		return fmt.Errorf("copying orchestrator.go: %w", err)
@@ -47,7 +53,7 @@ func (o *Orchestrator) Scaffold(targetDir, orchestratorRoot string) error {
 	binName := detectBinaryName(modulePath)
 	logf("scaffold: detected binary_name=%s", binName)
 
-	// 3. Generate configuration.yaml.
+	// 3. Generate configuration.yaml in the target root.
 	cfg := DefaultConfig()
 	cfg.ModulePath = modulePath
 	cfg.BinaryName = binName
@@ -60,14 +66,14 @@ func (o *Orchestrator) Scaffold(targetDir, orchestratorRoot string) error {
 		return fmt.Errorf("writing configuration.yaml: %w", err)
 	}
 
-	// 4. Wire go.mod.
-	logf("scaffold: wiring go.mod")
+	// 4. Wire magefiles/go.mod.
+	logf("scaffold: wiring magefiles/go.mod")
 	absOrch, err := filepath.Abs(orchestratorRoot)
 	if err != nil {
 		return fmt.Errorf("resolving orchestrator path: %w", err)
 	}
-	if err := scaffoldGoMod(targetDir, absOrch); err != nil {
-		return fmt.Errorf("wiring go.mod: %w", err)
+	if err := scaffoldMageGoMod(mageDir, modulePath, absOrch); err != nil {
+		return fmt.Errorf("wiring magefiles/go.mod: %w", err)
 	}
 
 	// 5. Verify.
@@ -169,18 +175,34 @@ func writeScaffoldConfig(path string, cfg Config) error {
 	return os.WriteFile(path, append([]byte(header), data...), 0o644)
 }
 
-// scaffoldGoMod adds the orchestrator dependency and replace directive
-// to the target repo's go.mod, then runs go mod tidy.
-func scaffoldGoMod(targetDir, orchestratorRoot string) error {
+// scaffoldMageGoMod ensures magefiles/go.mod exists with the orchestrator
+// dependency and replace directive pointing to the local checkout.
+// If magefiles/go.mod does not exist, it creates one.
+func scaffoldMageGoMod(mageDir, rootModule, orchestratorRoot string) error {
+	goMod := filepath.Join(mageDir, "go.mod")
+
+	// Create magefiles/go.mod if it does not exist.
+	if _, err := os.Stat(goMod); os.IsNotExist(err) {
+		mageModule := rootModule + "/magefiles"
+		logf("scaffold: creating %s (module %s)", goMod, mageModule)
+		initCmd := exec.Command(binGo, "mod", "init", mageModule)
+		initCmd.Dir = mageDir
+		if err := initCmd.Run(); err != nil {
+			return fmt.Errorf("go mod init: %w", err)
+		}
+	}
+
+	// Add replace directive.
 	replaceCmd := exec.Command(binGo, "mod", "edit",
 		"-replace", orchestratorModule+"="+orchestratorRoot)
-	replaceCmd.Dir = targetDir
+	replaceCmd.Dir = mageDir
 	if err := replaceCmd.Run(); err != nil {
 		return fmt.Errorf("go mod edit -replace: %w", err)
 	}
 
+	// Tidy resolves imports from orchestrator.go and adds required modules.
 	tidyCmd := exec.Command(binGo, "mod", "tidy")
-	tidyCmd.Dir = targetDir
+	tidyCmd.Dir = mageDir
 	tidyCmd.Stdout = os.Stdout
 	tidyCmd.Stderr = os.Stderr
 	if err := tidyCmd.Run(); err != nil {

@@ -96,24 +96,37 @@ func (o *Orchestrator) GeneratorResume() error {
 	return o.RunCycles("resume")
 }
 
-// RunCycles runs N measure+stitch cycles using Config settings.
-// The label parameter identifies the caller for log messages.
+// RunCycles runs measure+stitch cycles until no open issues remain.
+// If Config.Cycles > 0, it acts as a safety limit (max cycles before forced stop).
+// If Config.Cycles == 0, cycles run until all issues are closed.
 func (o *Orchestrator) RunCycles(label string) error {
-	logf("generator %s: starting %d cycle(s), %d issues per cycle", label, o.cfg.Cycles, o.cfg.MaxIssues)
+	logf("generator %s: starting (max issues per stitch=%d, safety limit=%d cycles)",
+		label, o.cfg.MaxIssues, o.cfg.Cycles)
 
-	for cycle := 1; cycle <= o.cfg.Cycles; cycle++ {
-		logf("generator %s: cycle %d/%d — measure", label, cycle, o.cfg.Cycles)
+	for cycle := 1; ; cycle++ {
+		if o.cfg.Cycles > 0 && cycle > o.cfg.Cycles {
+			logf("generator %s: reached max cycles (%d), stopping", label, o.cfg.Cycles)
+			break
+		}
+
+		logf("generator %s: cycle %d — measure", label, cycle)
 		if err := o.RunMeasure(); err != nil {
 			return fmt.Errorf("cycle %d measure: %w", cycle, err)
 		}
 
-		logf("generator %s: cycle %d/%d — stitch", label, cycle, o.cfg.Cycles)
+		logf("generator %s: cycle %d — stitch", label, cycle)
 		if err := o.RunStitch(); err != nil {
 			return fmt.Errorf("cycle %d stitch: %w", cycle, err)
 		}
+
+		if !o.hasOpenIssues() {
+			logf("generator %s: no open issues remain, stopping after %d cycle(s)", label, cycle)
+			break
+		}
+		logf("generator %s: open issues remain, continuing to cycle %d", label, cycle+1)
 	}
 
-	logf("generator %s: complete, ran %d cycle(s)", label, o.cfg.Cycles)
+	logf("generator %s: complete", label)
 	return nil
 }
 

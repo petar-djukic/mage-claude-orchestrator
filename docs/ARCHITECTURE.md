@@ -111,7 +111,7 @@ Table 1 Config Fields
 | ClaudeArgs | []string | claude_args | (standard flags) | CLI arguments for Claude execution |
 | SilenceAgent | *bool | silence_agent | true | Suppress Claude stdout |
 | MaxIssues | int | max_issues | 10 | Maximum tasks per measure or stitch phase |
-| Cycles | int | cycles | 1 | Number of measure+stitch cycles per run |
+| Cycles | int | cycles | 0 | Safety limit for cycles (0 = run until all issues closed) |
 | UserPrompt | string | user_prompt | "" | Additional context for the measure prompt |
 | GenerationBranch | string | generation_branch | "" | Explicit branch to work on (auto-detect if empty) |
 | TokenFile | string | token_file | DefaultTokenFile | Credential file override in SecretsDir |
@@ -120,6 +120,7 @@ Table 1 Config Fields
 | CleanupDirs | []string | cleanup_dirs | [] | Directories to remove after generation stop or reset |
 | PodmanImage | string | podman_image | (required) | Container image for Claude execution |
 | PodmanArgs | []string | podman_args | [] | Additional arguments passed to podman run |
+| ClaudeMaxTimeSec | int | claude_max_time_sec | 300 | Maximum seconds per Claude invocation; process killed on expiry |
 
 `LoadConfig(path)` reads the YAML file, resolves SeedFiles values (file paths to template content), resolves MeasurePrompt/StitchPrompt (file paths to template content), and applies defaults. SilenceAgent uses a `*bool` to distinguish "not set in YAML" (nil, defaults to true) from "explicitly set to false".
 
@@ -130,7 +131,7 @@ Table 2 Orchestrator Operations
 | Method | Purpose | PRD |
 |--------|---------|-----|
 | GeneratorStart() | Tag main, create generation branch, reset sources | prd002 |
-| GeneratorRun() | Run N measure+stitch cycles | prd002 |
+| GeneratorRun() | Run measure+stitch cycles until all issues are closed | prd002 |
 | GeneratorResume() | Recover and continue interrupted run | prd002 |
 | GeneratorStop() | Merge generation into main, tag, clean up | prd002 |
 | GeneratorReset() | Destroy all generations, return to clean main | prd002 |

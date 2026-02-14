@@ -1,0 +1,55 @@
+{
+  "name": "mage-orchestrator",
+  "displayName": "Mage Orchestrator Dashboard",
+  "description": "Status dashboard for mage-claude-orchestrator generation cycles",
+  "version": "0.0.1",
+  "publisher": "mesh-intelligence",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "mageOrchestrator.showDashboard",
+        "title": "Mage Orchestrator: Show Dashboard"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "mage-orchestrator",
+          "title": "Mage Orchestrator",
+          "icon": "$(beaker)"
+        }
+      ]
+    },
+    "views": {
+      "mage-orchestrator": [
+        {
+          "id": "mageOrchestrator.status",
+          "name": "Status"
+        },
+        {
+          "id": "mageOrchestrator.issues",
+          "name": "Issues"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.3.0"
+  }
+}

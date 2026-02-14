@@ -50,6 +50,7 @@ requirements:
       - R1.27: Config must include CleanupDirs ([]string) listing directories to remove after generation stop or reset
       - R1.28: Config must include PodmanImage (string, required) for the container image used for Claude execution
       - R1.29: Config must include PodmanArgs ([]string) for additional arguments passed to podman run
+      - R1.30: Config must include ClaudeMaxTimeSec (int, default 300) for the maximum seconds per Claude invocation
 
   R2:
     title: Constructor and Defaults
@@ -64,9 +65,10 @@ requirements:
       - R2.8: applyDefaults must set DefaultTokenFile to "claude.json" when empty
       - R2.9: applyDefaults must set ClaudeArgs to defaultClaudeArgs when empty
       - R2.10: applyDefaults must set MaxIssues to 10 when zero
-      - R2.11: applyDefaults must set Cycles to 1 when zero
+      - R2.11: Cycles defaults to 0 (unlimited); acts as a safety limit when positive
       - R2.12: applyDefaults must set EstimatedLinesMin to 250 when zero
       - R2.13: applyDefaults must set EstimatedLinesMax to 350 when zero
+      - R2.14: applyDefaults must set ClaudeMaxTimeSec to 300 when zero
 
   R3:
     title: Logging

@@ -87,6 +87,10 @@ requirements:
       - R6.5: parseClaudeTokens must extract input and output token counts from stream-json output
       - R6.6: When silence is false, Claude stdout must be tee'd to both buffer and os.Stdout
       - R6.7: runClaude must pass Config.PodmanArgs before the image name and Config.ClaudeArgs after the claude binary
+      - R6.8: runClaude must use context.WithTimeout to enforce ClaudeMaxTimeSec; process is killed on expiry
+      - R6.9: runClaude must clear Claude history files ($HOME/.claude.json*) before each invocation
+      - R6.10: On Claude failure or timeout in stitch, the task must be reset to ready and the worktree cleaned up
+      - R6.11: On merge failure in stitch, the task must be reset to ready and the worktree cleaned up
 
   R7:
     title: Issue Import

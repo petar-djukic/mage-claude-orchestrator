@@ -6,53 +6,35 @@ package orchestrator
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
 
-// Config holds all orchestrator settings. Consuming repos either
-// construct a Config in Go code and pass it to New(), or place a
-// configuration.yaml at the repository root and call NewFromFile().
-type Config struct {
-	// ModulePath is the Go module path (e.g., "github.com/mesh-intelligence/crumbs").
+// ProjectConfig holds settings that describe the consuming project.
+type ProjectConfig struct {
+	// ModulePath is the Go module path (e.g., "github.com/org/project").
 	ModulePath string `yaml:"module_path"`
 
-	// BinaryName is the name of the compiled binary (e.g., "cupboard").
+	// BinaryName is the name of the compiled binary.
 	BinaryName string `yaml:"binary_name"`
 
 	// BinaryDir is the output directory for compiled binaries (default "bin").
 	BinaryDir string `yaml:"binary_dir"`
 
-	// MainPackage is the path to the main.go entry point
-	// (e.g., "cmd/cupboard/main.go").
+	// MainPackage is the path to the main.go entry point.
 	MainPackage string `yaml:"main_package"`
 
 	// GoSourceDirs lists directories containing Go source files
 	// (e.g., ["cmd/", "pkg/", "internal/", "tests/"]).
 	GoSourceDirs []string `yaml:"go_source_dirs"`
 
-	// VersionFile is the path to the version file
-	// (e.g., "pkg/crumbs/version.go").
+	// VersionFile is the path to the version file.
 	VersionFile string `yaml:"version_file"`
-
-	// GenPrefix is the prefix for generation branch names (default "generation-").
-	GenPrefix string `yaml:"gen_prefix"`
-
-	// BeadsDir is the beads database directory (default ".beads/").
-	BeadsDir string `yaml:"beads_dir"`
-
-	// CobblerDir is the cobbler scratch directory (default ".cobbler/").
-	CobblerDir string `yaml:"cobbler_dir"`
 
 	// MagefilesDir is the directory skipped when deleting Go files
 	// (default "magefiles").
 	MagefilesDir string `yaml:"magefiles_dir"`
-
-	// SecretsDir is the directory containing token files (default ".secrets").
-	SecretsDir string `yaml:"secrets_dir"`
-
-	// DefaultTokenFile is the default credential filename (default "claude.json").
-	DefaultTokenFile string `yaml:"default_token_file"`
 
 	// SpecGlobs maps a label to a glob pattern for word-count stats.
 	SpecGlobs map[string]string `yaml:"spec_globs"`
@@ -62,6 +44,39 @@ type Config struct {
 	// the map value. During generator:start and generator:reset the content
 	// strings are executed as Go text/template templates with SeedData.
 	SeedFiles map[string]string `yaml:"seed_files"`
+}
+
+// GenerationConfig holds settings for the generation lifecycle.
+type GenerationConfig struct {
+	// GenPrefix is the prefix for generation branch names (default "generation-").
+	GenPrefix string `yaml:"gen_prefix"`
+
+	// Cycles is the maximum number of measure+stitch cycles per run
+	// (default 0, meaning run until all issues are closed).
+	Cycles int `yaml:"cycles"`
+
+	// GenerationBranch selects a specific generation branch to work on.
+	// If empty, the orchestrator auto-detects from existing branches.
+	GenerationBranch string `yaml:"generation_branch"`
+
+	// CleanupDirs lists directories to remove after generation stop or reset.
+	// Empty by default.
+	CleanupDirs []string `yaml:"cleanup_dirs"`
+}
+
+// CobblerConfig holds settings for the measure and stitch workflows.
+type CobblerConfig struct {
+	// CobblerDir is the cobbler scratch directory (default ".cobbler/").
+	CobblerDir string `yaml:"cobbler_dir"`
+
+	// BeadsDir is the beads database directory (default ".beads/").
+	BeadsDir string `yaml:"beads_dir"`
+
+	// MaxIssues is the maximum number of tasks per measure or stitch phase (default 10).
+	MaxIssues int `yaml:"max_issues"`
+
+	// UserPrompt provides additional context for the measure prompt.
+	UserPrompt string `yaml:"user_prompt"`
 
 	// MeasurePrompt is a file path to a custom measure prompt template.
 	// During LoadConfig the file is read and its content stored here.
@@ -73,30 +88,6 @@ type Config struct {
 	// If empty, the embedded default is used.
 	StitchPrompt string `yaml:"stitch_prompt"`
 
-	// ClaudeArgs are the CLI arguments for automated Claude execution.
-	// If empty, defaults to the standard automated flags.
-	ClaudeArgs []string `yaml:"claude_args"`
-
-	// SilenceAgent suppresses Claude stdout when true (default true).
-	SilenceAgent *bool `yaml:"silence_agent"`
-
-	// MaxIssues is the maximum number of tasks per measure or stitch phase (default 10).
-	MaxIssues int `yaml:"max_issues"`
-
-	// Cycles is the number of measure+stitch cycles per run (default 1).
-	Cycles int `yaml:"cycles"`
-
-	// UserPrompt provides additional context for the measure prompt.
-	UserPrompt string `yaml:"user_prompt"`
-
-	// GenerationBranch selects a specific generation branch to work on.
-	// If empty, the orchestrator auto-detects from existing branches.
-	GenerationBranch string `yaml:"generation_branch"`
-
-	// TokenFile overrides the credential filename in SecretsDir.
-	// If empty, DefaultTokenFile is used.
-	TokenFile string `yaml:"token_file"`
-
 	// EstimatedLinesMin is the minimum estimated lines per task (default 250).
 	// Passed to the measure prompt template as LinesMin.
 	EstimatedLinesMin int `yaml:"estimated_lines_min"`
@@ -104,17 +95,57 @@ type Config struct {
 	// EstimatedLinesMax is the maximum estimated lines per task (default 350).
 	// Passed to the measure prompt template as LinesMax.
 	EstimatedLinesMax int `yaml:"estimated_lines_max"`
+}
 
-	// CleanupDirs lists directories to remove after generation stop or reset.
-	// Empty by default.
-	CleanupDirs []string `yaml:"cleanup_dirs"`
-
+// PodmanConfig holds settings for the podman container runtime.
+type PodmanConfig struct {
 	// PodmanImage is the container image for Claude execution (required).
 	// Claude runs inside a podman container for isolation.
 	PodmanImage string `yaml:"podman_image"`
 
 	// PodmanArgs are additional arguments passed to podman run before the image name.
 	PodmanArgs []string `yaml:"podman_args"`
+
+	// ClaudeMaxTimeSec is the maximum duration in seconds for a single Claude
+	// invocation (default 300, i.e. 5 minutes). If the time expires, the
+	// process is killed and the task is returned to beads.
+	ClaudeMaxTimeSec int `yaml:"claude_max_time_sec"`
+}
+
+// ClaudeTimeout returns the max time as a time.Duration.
+func (p *PodmanConfig) ClaudeTimeout() time.Duration {
+	return time.Duration(p.ClaudeMaxTimeSec) * time.Second
+}
+
+// ClaudeConfig holds settings for the Claude CLI.
+type ClaudeConfig struct {
+	// ClaudeArgs are the CLI arguments for automated Claude execution.
+	// If empty, defaults to the standard automated flags.
+	ClaudeArgs []string `yaml:"claude_args"`
+
+	// SilenceAgent suppresses Claude stdout when true (default true).
+	SilenceAgent *bool `yaml:"silence_agent"`
+
+	// SecretsDir is the directory containing token files (default ".secrets").
+	SecretsDir string `yaml:"secrets_dir"`
+
+	// DefaultTokenFile is the default credential filename (default "claude.json").
+	DefaultTokenFile string `yaml:"default_token_file"`
+
+	// TokenFile overrides the credential filename in SecretsDir.
+	// If empty, DefaultTokenFile is used.
+	TokenFile string `yaml:"token_file"`
+}
+
+// Config holds all orchestrator settings. Consuming repos either
+// construct a Config in Go code and pass it to New(), or place a
+// configuration.yaml at the repository root and call NewFromFile().
+type Config struct {
+	ProjectConfig    `yaml:",inline"`
+	GenerationConfig `yaml:",inline"`
+	CobblerConfig    `yaml:",inline"`
+	PodmanConfig     `yaml:",inline"`
+	ClaudeConfig     `yaml:",inline"`
 }
 
 // DefaultConfigFile is the conventional configuration filename.
@@ -126,7 +157,7 @@ const DefaultConfigFile = "configuration.yaml"
 func DefaultConfig() Config {
 	t := true
 	cfg := Config{
-		SilenceAgent: &t,
+		ClaudeConfig: ClaudeConfig{SilenceAgent: &t},
 	}
 	cfg.applyDefaults()
 	return cfg
@@ -201,14 +232,14 @@ func (c *Config) applyDefaults() {
 	if c.MaxIssues == 0 {
 		c.MaxIssues = 10
 	}
-	if c.Cycles == 0 {
-		c.Cycles = 1
-	}
 	if c.EstimatedLinesMin == 0 {
 		c.EstimatedLinesMin = 250
 	}
 	if c.EstimatedLinesMax == 0 {
 		c.EstimatedLinesMax = 350
+	}
+	if c.ClaudeMaxTimeSec == 0 {
+		c.ClaudeMaxTimeSec = 300
 	}
 }
 

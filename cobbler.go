@@ -5,6 +5,7 @@ package orchestrator
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -116,9 +117,26 @@ func (o *Orchestrator) checkPodman() error {
 	return nil
 }
 
+// clearClaudeHistory removes Claude conversation history files from $HOME.
+func clearClaudeHistory() {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		logf("clearClaudeHistory: cannot determine home dir: %v", err)
+		return
+	}
+	matches, _ := filepath.Glob(filepath.Join(home, ".claude.json*"))
+	for _, f := range matches {
+		logf("clearClaudeHistory: removing %s", f)
+		os.Remove(f)
+	}
+}
+
 // runClaude executes Claude inside a podman container and returns token usage.
+// The process is killed if ClaudeMaxTimeSec is exceeded.
 func (o *Orchestrator) runClaude(prompt, dir string, silence bool) (ClaudeResult, error) {
 	logf("runClaude: promptLen=%d dir=%q silence=%v", len(prompt), dir, silence)
+
+	clearClaudeHistory()
 
 	// Determine the host directory to mount into the container.
 	mountDir := dir
@@ -130,6 +148,10 @@ func (o *Orchestrator) runClaude(prompt, dir string, silence bool) (ClaudeResult
 		}
 	}
 
+	timeout := o.cfg.ClaudeTimeout()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
 	// podman run --rm -i -v host:host -w host [PodmanArgs...] image claude [ClaudeArgs...]
 	args := []string{"run", "--rm", "-i",
 		"-v", mountDir + ":" + mountDir,
@@ -140,8 +162,8 @@ func (o *Orchestrator) runClaude(prompt, dir string, silence bool) (ClaudeResult
 	args = append(args, binClaude)
 	args = append(args, o.cfg.ClaudeArgs...)
 
-	logf("runClaude: exec %s %v", binPodman, args)
-	cmd := exec.Command(binPodman, args...)
+	logf("runClaude: exec %s %v (timeout=%s)", binPodman, args, timeout)
+	cmd := exec.CommandContext(ctx, binPodman, args...)
 	cmd.Stdin = strings.NewReader(prompt)
 
 	var stdoutBuf bytes.Buffer
@@ -154,6 +176,12 @@ func (o *Orchestrator) runClaude(prompt, dir string, silence bool) (ClaudeResult
 
 	start := time.Now()
 	err := cmd.Run()
+
+	if ctx.Err() == context.DeadlineExceeded {
+		logf("runClaude: killed after %s (max time %s exceeded)", time.Since(start).Round(time.Second), timeout)
+		return ClaudeResult{}, fmt.Errorf("claude max time exceeded (%s)", timeout)
+	}
+
 	result := parseClaudeTokens(stdoutBuf.Bytes())
 	logf("runClaude: finished in %s tokens(in=%d out=%d) (err=%v)",
 		time.Since(start).Round(time.Second), result.InputTokens, result.OutputTokens, err)
@@ -173,6 +201,19 @@ func (o *Orchestrator) logConfig(target string) {
 func worktreeBasePath() string {
 	repoRoot, _ := os.Getwd()
 	return filepath.Join(os.TempDir(), filepath.Base(repoRoot)+"-worktrees")
+}
+
+// hasOpenIssues returns true if there are ready tasks in beads.
+func (o *Orchestrator) hasOpenIssues() bool {
+	out, err := bdListReadyTasks()
+	if err != nil {
+		return false
+	}
+	var tasks []json.RawMessage
+	if err := json.Unmarshal(out, &tasks); err != nil {
+		return false
+	}
+	return len(tasks) > 0
 }
 
 // CobblerReset removes the cobbler scratch directory.

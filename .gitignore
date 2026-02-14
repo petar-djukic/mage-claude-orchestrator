@@ -30,3 +30,7 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# VS Code extension build artifacts
+vscode-extension/node_modules/
+vscode-extension/out/

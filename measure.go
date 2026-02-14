@@ -92,7 +92,7 @@ func (o *Orchestrator) RunMeasure() error {
 
 	// Snapshot LOC after Claude (measure doesn't change code, but record for consistency).
 	locAfter := o.captureLOC()
-
+    
 	// Import proposed issues.
 	if _, statErr := os.Stat(outputFile); statErr != nil {
 		logf("measure: output file not found at %s (Claude may not have written it)", outputFile)
@@ -100,6 +100,7 @@ func (o *Orchestrator) RunMeasure() error {
 	}
 
 	fileInfo, _ := os.Stat(outputFile)
+
 	logf("measure: output file found, size=%d bytes", fileInfo.Size())
 
 	logf("measure: importing issues from %s", outputFile)
@@ -145,8 +146,34 @@ func getExistingIssues() string {
 		logf("getExistingIssues: bd list failed: %v", err)
 		return "[]"
 	}
-	logf("getExistingIssues: got %d bytes", len(out))
-	return string(out)
+
+	// Extract IDs from the list and fetch full content for each issue.
+	var issues []struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(out, &issues); err != nil || len(issues) == 0 {
+		logf("getExistingIssues: parse or empty: err=%v len=%d", err, len(issues))
+		return string(out)
+	}
+
+	logf("getExistingIssues: fetching full content for %d issue(s)", len(issues))
+	var fullIssues []json.RawMessage
+	for _, issue := range issues {
+		detail, err := bdShowJSON(issue.ID)
+		if err != nil {
+			logf("getExistingIssues: bd show %s failed: %v", issue.ID, err)
+			continue
+		}
+		fullIssues = append(fullIssues, json.RawMessage(detail))
+	}
+
+	result, err := json.Marshal(fullIssues)
+	if err != nil {
+		logf("getExistingIssues: marshal failed: %v", err)
+		return string(out)
+	}
+	logf("getExistingIssues: got %d full issue(s), %d bytes", len(fullIssues), len(result))
+	return string(result)
 }
 
 func countJSONArray(jsonStr string) int {
@@ -172,7 +199,9 @@ func (o *Orchestrator) buildMeasurePrompt(userInput, existingIssues string, limi
 	if tmplStr == "" {
 		tmplStr = defaultMeasurePromptTmpl
 	}
+
 	tmpl := template.Must(template.New("measure").Parse(tmplStr))
+
 	data := MeasurePromptData{
 		ExistingIssues: existingIssues,
 		Limit:          limit,
@@ -181,6 +210,9 @@ func (o *Orchestrator) buildMeasurePrompt(userInput, existingIssues string, limi
 		LinesMin:       o.cfg.EstimatedLinesMin,
 		LinesMax:       o.cfg.EstimatedLinesMax,
 	}
+
+	logf("buildMeasurePrompt: existingIssues=%d limit=%d userInput=%v",
+		countJSONArray(existingIssues), limit, userInput != "")
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
 		panic(fmt.Sprintf("measure prompt template: %v", err))

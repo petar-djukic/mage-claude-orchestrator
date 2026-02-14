@@ -300,7 +300,12 @@ func (o *Orchestrator) doOneTask(task stitchTask, baseBranch, repoRoot string) e
 	tokens, err := o.runClaude(prompt, task.worktreeDir, o.cfg.Silence())
 	if err != nil {
 		logf("doOneTask: Claude failed for %s after %s: %v", task.id, time.Since(claudeStart).Round(time.Second), err)
-		return fmt.Errorf("running Claude: %w", err)
+		logf("doOneTask: resetting task %s to ready", task.id)
+		bdUpdateStatus(task.id, "ready")
+		cleanupWorktree(task)
+		gitForceDeleteBranch(task.branchName)
+		o.beadsCommit(fmt.Sprintf("Reset %s after Claude failure", task.id))
+		return nil
 	}
 	logf("doOneTask: Claude completed for %s in %s", task.id, time.Since(claudeStart).Round(time.Second))
 
@@ -311,8 +316,13 @@ func (o *Orchestrator) doOneTask(task stitchTask, baseBranch, repoRoot string) e
 	logf("doOneTask: merging %s into %s", task.branchName, baseBranch)
 	mergeStart := time.Now()
 	if err := mergeBranch(task.branchName, baseBranch, repoRoot); err != nil {
-		logf("doOneTask: merge failed after %s: %v", time.Since(mergeStart).Round(time.Second), err)
-		return fmt.Errorf("merging branch: %w", err)
+		logf("doOneTask: merge failed for %s after %s: %v", task.id, time.Since(mergeStart).Round(time.Second), err)
+		logf("doOneTask: resetting task %s to ready", task.id)
+		bdUpdateStatus(task.id, "ready")
+		cleanupWorktree(task)
+		gitForceDeleteBranch(task.branchName)
+		o.beadsCommit(fmt.Sprintf("Reset %s after merge failure", task.id))
+		return nil
 	}
 	logf("doOneTask: merge completed in %s", time.Since(mergeStart).Round(time.Second))
 

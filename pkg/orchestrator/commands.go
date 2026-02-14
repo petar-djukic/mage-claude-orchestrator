@@ -284,6 +284,22 @@ func parseDiffShortstat(s string) diffStat {
 	return ds
 }
 
+// Podman helpers.
+
+// podmanBuild builds a container image from a Dockerfile, applying one or
+// more image tags. Each tag is a full image reference (e.g., "name:v1").
+func podmanBuild(dockerfile string, tags ...string) error {
+	args := []string{"build", "-f", dockerfile}
+	for _, t := range tags {
+		args = append(args, "-t", t)
+	}
+	args = append(args, ".")
+	cmd := exec.Command(binPodman, args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
 // Go helpers.
 
 func (o *Orchestrator) goModInit() error {

@@ -15,3 +15,13 @@ Examples: `v0.20260213.0`, `v0.20260213.1`, `v1.20260301.0`.
 The REVISION starts at 0 for each new date and increments if multiple tags are created on the same date.
 
 When the user asks to tag, use this format. The orchestrator also uses this scheme when completing a generation (GeneratorStop): the merged code is tagged `v0.YYYYMMDD.N` and the requirements state is tagged `v0.YYYYMMDD.N-requirements`.
+
+## Container Image Build
+
+Every tag includes a container image build from `Dockerfile.claude`. When tagging, build and tag the image:
+
+```bash
+podman build -f Dockerfile.claude -t mage-claude-orchestrator:v0.YYYYMMDD.N .
+```
+
+The image tag matches the git tag. The `latest` tag is also applied to the most recent build.

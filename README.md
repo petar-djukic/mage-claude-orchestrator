@@ -174,38 +174,60 @@ Default claude_args: `--dangerously-skip-permissions -p --verbose --output-forma
 
 ## Quick Start
 
-In your consuming project's Magefile:
+### Automated Setup (Recommended)
 
-```go
-package main
-
-import orchestrator "github.com/mesh-intelligence/mage-claude-orchestrator/pkg/orchestrator"
-
-var o *orchestrator.Orchestrator
-
-func init() {
-    var err error
-    o, err = orchestrator.NewFromFile("configuration.yaml")
-    if err != nil {
-        panic(err)
-    }
-}
-
-func GeneratorStart() error { return o.GeneratorStart() }
-func GeneratorRun() error   { return o.GeneratorRun() }
-func GeneratorStop() error  { return o.GeneratorStop() }
-```
-
-Then run:
+From **this orchestrator repository**, scaffold your target project:
 
 ```bash
-# Edit configuration.yaml: set module_path, binary_name, podman_image, etc.
+# Clone the orchestrator
+git clone https://github.com/mesh-intelligence/mage-claude-orchestrator.git
+cd mage-claude-orchestrator
+
+# Scaffold your target repository (must have go.mod)
+mage test:scaffold /path/to/your/project
+```
+
+This automatically:
+
+- Copies `orchestrator.go` to `magefiles/orchestrator.go` in your project
+- Detects project structure (module path, main package, source directories)
+- Generates `configuration.yaml` with detected settings
+- Wires `magefiles/go.mod` with orchestrator dependency
+- Copies design constitution to `docs/CONSTITUTION-design.yaml`
+- Creates version template if main package detected
+
+### After Scaffolding
+
+In **your target repository**:
+
+```bash
+# Review and edit configuration.yaml (Claude credentials, etc.)
+# Initialize beads issue tracker
+mage init
+
+# Start your first generation
 mage generator:start       # Create generation branch from main
 mage generator:run         # Run measure+stitch cycles
 mage generator:stop        # Merge generation into main
 ```
 
 If a run is interrupted, `mage generator:resume` recovers state and continues. To discard a generation, `mage generator:reset` returns to a clean main.
+
+### Files Created by Scaffold
+
+```text
+your-project/
+├── configuration.yaml          # Auto-generated config
+├── docs/
+│   └── CONSTITUTION-design.yaml  # Format rules for specs
+└── magefiles/
+    ├── orchestrator.go         # Mage targets (template from orchestrator repo)
+    ├── version.go.tmpl         # Seed template (if main package detected)
+    ├── go.mod                  # Separate module for build tooling
+    └── go.sum
+```
+
+The `magefiles/` directory keeps build tooling dependencies separate from your project dependencies.
 
 ## Mage Targets
 

@@ -54,8 +54,8 @@ interfaces:
     data_structures:
       - "Orchestrator: holds Config, provides New() and NewFromFile() constructors"
       - "Config: all orchestrator settings with YAML tags (see prd001-orchestrator-core for full field spec)"
-      - "MeasurePromptData: template data for measure prompt (ExistingIssues, Limit, OutputPath, UserInput, LinesMin, LinesMax)"
-      - "StitchPromptData: template data for stitch prompt (Title, ID, IssueType, Description)"
+      - "MeasurePromptData: template data for measure prompt (ExistingIssues, Limit, OutputPath, UserInput, LinesMin, LinesMax, PlanningConstitution, Vision, Architecture)"
+      - "StitchPromptData: template data for stitch prompt (Title, ID, IssueType, Description, ExecutionConstitution)"
       - "InvocationRecord: metrics per Claude invocation (Caller, StartedAt, DurationS, Tokens, LOCBefore, LOCAfter, Diff)"
     operations:
       - "New(cfg Config) *Orchestrator: construct with explicit config"
@@ -80,10 +80,12 @@ interfaces:
     summary: |
       Prompts are Go text/template strings embedded from pkg/orchestrator/prompts/measure.tmpl
       and pkg/orchestrator/prompts/stitch.tmpl. Consuming projects can override them via
-      Config.MeasurePrompt and Config.StitchPrompt.
+      Config.MeasurePrompt and Config.StitchPrompt. Prompts are injected with phase-specific
+      constitutions (planning for measure, execution for stitch) and project context (Vision,
+      Architecture).
     data_structures:
-      - "MeasurePromptData: ExistingIssues (JSON string), Limit (int), OutputPath (string), UserInput (string), LinesMin (int), LinesMax (int)"
-      - "StitchPromptData: Title, ID, IssueType, Description (all strings)"
+      - "MeasurePromptData: ExistingIssues (JSON string), Limit (int), OutputPath (string), UserInput (string), LinesMin (int), LinesMax (int), PlanningConstitution (embedded YAML), Vision (YAML), Architecture (YAML)"
+      - "StitchPromptData: Title, ID, IssueType, Description (all strings), ExecutionConstitution (embedded YAML)"
 
 components:
   - name: Orchestrator
@@ -180,6 +182,18 @@ components:
     references:
       - prd001-orchestrator-core
 
+  - name: Constitutions
+    responsibility: |
+      Three YAML constitutions (design, planning, execution) govern the three workflow phases.
+      Design constitution is scaffolded to consuming projects. Planning and execution
+      constitutions are embedded in the binary and injected into measure and stitch prompts.
+    capabilities:
+      - Design constitution (design.yaml) defines documentation standards, format schemas, and traceability model
+      - Planning constitution (planning.yaml) defines release priority, task sizing, and issue structure
+      - Execution constitution (execution.yaml) defines coding standards, design patterns, and session completion
+    references:
+      - Design decision 8 (three-phase constitution architecture)
+
 design_decisions:
   - id: 1
     title: Library with YAML configuration
@@ -268,6 +282,24 @@ design_decisions:
     alternatives_rejected:
       - "Requiring manual cleanup after interruption: error-prone and creates friction"
 
+  - id: 8
+    title: Three-phase constitution architecture
+    decision: |
+      Project governance is split into three constitutions aligned with workflow phases:
+      (1) Design constitution (design.yaml) scaffolded to consuming projects for interactive
+      documentation work; (2) Planning constitution (planning.yaml) embedded in the binary
+      and injected into measure prompts; (3) Execution constitution (execution.yaml) embedded
+      in the binary and injected into stitch prompts. Each constitution contains only the
+      rules relevant to its phase.
+    benefits:
+      - Measure and stitch agents receive only the rules they need, reducing prompt bloat
+      - Design constitution is available in consuming projects without embedding the entire orchestrator
+      - Clear separation of concerns between documentation, planning, and implementation phases
+      - Constitutions are YAML-structured and machine-parseable
+    alternatives_rejected:
+      - "Scattered .claude/rules/*.md files: verbose markdown prose, no phase separation, all rules injected into every prompt"
+      - "Single monolithic constitution: measure agents see coding standards they don't need, stitch agents see format schemas they don't need"
+
 technology_choices:
   - component: Language
     technology: Go 1.25
@@ -319,6 +351,10 @@ project_structure:
     role: LOC and documentation metrics
   - path: pkg/orchestrator/prompts/
     role: Embedded prompt templates (measure.tmpl, stitch.tmpl)
+  - path: pkg/orchestrator/constitutions/
+    role: Embedded constitutions (design.yaml, planning.yaml, execution.yaml)
+  - path: cmd/orchestrator/
+    role: CLI binary for testing orchestrator functions without mage
   - path: vscode-extension/
     role: VS Code status dashboard (TypeScript)
   - path: docs/

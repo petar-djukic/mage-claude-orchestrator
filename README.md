@@ -67,6 +67,63 @@ podman_args:
 
 The orchestrator runs a pre-flight check before every measure and stitch phase. If podman is not installed or cannot start a container, it exits with instructions pointing here.
 
+## Three-Phase Constitution Architecture
+
+The orchestrator uses three constitutions aligned with the three workflow phases:
+
+### 1. Design Constitution
+
+**Phase:** Interactive design/architecting (writing VISION, ARCHITECTURE, PRDs, use cases, test suites)
+
+**Location:** Scaffolded to consuming projects as `docs/CONSTITUTION-design.yaml`
+
+**Contains:** Documentation standards, format schemas for all document types, traceability model
+
+**Used by:** Human or Claude in interactive mode writing specifications
+
+The design constitution includes:
+
+- Articles D1-D5: Specification-first, YAML-first, test suite linkage, traceability, roadmap-driven releases
+- Documentation standards: Strunk & White style, forbidden terms, figure formats
+- Document types: VISION, ARCHITECTURE, PRD, use case, test suite, engineering guideline, specification
+- Naming conventions and completeness checklists for each document type
+
+### 2. Planning Constitution
+
+**Phase:** Breaking down work (measure)
+
+**Location:** Embedded in orchestrator binary (`pkg/orchestrator/constitutions/planning.yaml`)
+
+**Contains:** Release priority, task sizing rules, issue structure (crumb-format), dependency ordering
+
+**Used by:** Measure prompt to propose well-formed tasks
+
+The planning constitution includes:
+
+- Articles P1-P5: Release-driven priority, task sizing (300-700 LOC, ≤5 files), task limit, issue structure, dependency ordering
+- Issue structure: Common fields, documentation vs code issues, example templates
+- Deliverable types: ARCHITECTURE, PRD, use case, test suite, engineering guideline, specification
+
+### 3. Execution Constitution
+
+**Phase:** Implementing tasks (stitch)
+
+**Location:** Embedded in orchestrator binary (`pkg/orchestrator/constitutions/execution.yaml`)
+
+**Contains:** Go coding standards, design patterns, traceability, session completion, quality gates
+
+**Used by:** Stitch prompt to ensure code quality and project conventions
+
+The execution constitution includes:
+
+- Articles E1-E5: Specification-first, traceability, no scope creep, session completion, quality gates
+- Coding standards: Copyright headers, no duplication, design patterns (Strategy, Command, Facade, etc.)
+- Project structure: cmd/, internal/, pkg/, tests/, magefiles/
+- Error handling, concurrency, testing, naming conventions
+- Session completion workflow and git conventions
+
+When you run `mage scaffold`, the design constitution is automatically copied to the consuming project. The planning and execution constitutions are embedded in the orchestrator binary and injected into measure and stitch prompts respectively.
+
 ## Configuration
 
 All options live in `configuration.yaml` at the repository root. For consuming projects, the orchestrator provides a scaffold command that detects project structure and generates configuration.yaml automatically:

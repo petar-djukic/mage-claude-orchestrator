@@ -70,6 +70,19 @@ documentation_standards:
       Explain abbreviations at least once per document section. Define
       domain-specific abbreviations on first use.
 
+    yaml_scalars: |
+      A YAML block mapping value that starts with a double-quote character
+      must be a complete double-quoted string. If the value contains a
+      double-quoted token followed by more text (e.g. a flag name like "-"
+      followed by a prose description), wrap the entire value in single quotes:
+
+        WRONG:  description: "-" as a filename argument reads from stdin.
+        RIGHT:  description: '"-" as a filename argument reads from stdin.'
+
+      Alternatively use a literal block scalar (|). Never write a value where
+      a leading or embedded double-quote would cause the YAML parser to treat
+      part of the string as a quoted scalar and the rest as unexpected content.
+
   figures_and_diagrams: |
     All diagrams MUST be written in PlantUML and defined inline in markdown
     using fenced code blocks. Do not create separate .puml files or PNG images.

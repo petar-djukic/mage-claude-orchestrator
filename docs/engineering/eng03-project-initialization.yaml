@@ -1,0 +1,195 @@
+# Copyright (c) 2026 Petar Djukic. All rights reserved.
+# SPDX-License-Identifier: MIT
+
+id: eng03-project-initialization
+title: Project Initialization and Scaffold
+
+introduction: |
+  A consuming project integrates the orchestrator by running the scaffold command,
+  which detects the project structure and generates the files needed to run
+  measure-stitch cycles. This document covers prerequisites, the scaffold procedure,
+  the files it creates, podman configuration, the configuration reference, and
+  the available Mage targets.
+
+sections:
+  - title: Prerequisites
+    content: |
+      The target project must satisfy these conditions before scaffolding:
+
+      - Go module initialized: go.mod exists at the repository root.
+      - Git repository initialized and on the main branch.
+      - Clean working tree: no uncommitted changes.
+
+      Install the required tools:
+
+      | Tool | Purpose |
+      |------|---------|
+      | Go 1.25+ | Build and run |
+      | Mage (magefile/mage) | Build system; orchestrator methods are Mage targets |
+      | Beads (bd) | Git-backed issue tracking |
+      | Podman | Container runtime for Claude execution |
+
+  - title: Scaffold Procedure
+    content: |
+      Run the scaffold command from the orchestrator repository, passing the
+      absolute or relative path to the target project:
+
+        mage test:scaffold /path/to/target-project
+
+      The scaffold command:
+      1. Detects project structure — module path, main package, source directories.
+      2. Generates configuration.yaml with detected settings.
+      3. Copies magefiles/orchestrator.go into the target as magefiles/orchestrator.go.
+      4. Wires magefiles/go.mod with the orchestrator dependency.
+      5. Copies the design constitution to docs/constitutions/design.yaml.
+      6. Creates a version seed template (magefiles/version.go.tmpl) if a main
+         package is detected.
+
+      After scaffolding, initialize the issue tracker in the target project:
+
+        cd /path/to/target-project
+        mage init
+
+  - title: Files Created by Scaffold
+    content: |
+      The scaffold produces the following layout in the target project:
+
+        configuration.yaml              — orchestrator settings; edit before first run
+        docs/
+          constitutions/
+            design.yaml                 — specification authoring rules (editable)
+            planning.yaml               — measure phase rules (editable)
+            execution.yaml              — stitch phase rules (editable)
+        magefiles/
+          orchestrator.go               — Mage targets (copied from orchestrator repo)
+          version.go.tmpl               — version seed template (if main package found)
+          go.mod                        — separate module for build tooling
+          go.sum
+
+      The magefiles/ directory keeps build tooling dependencies separate from
+      the project's own go.mod.
+
+  - title: Podman Configuration
+    content: |
+      Claude runs inside a podman container. The orchestrator wraps every
+      Claude invocation in podman run, mounting the repository directory at
+      the same absolute path inside the container. Same-path mounting ensures
+      that absolute file references in prompts resolve correctly.
+
+      Install podman on macOS:
+
+        brew install podman
+        podman machine init
+        podman machine start
+
+      Prepare a container image that has the claude CLI installed. Verify:
+
+        podman run --rm <your-image> claude --version
+
+      Set podman_image in configuration.yaml:
+
+        podman:
+          image: "your-claude-image:latest"
+
+      Pass additional arguments (environment variables, extra mounts) via
+      podman_args:
+
+        podman:
+          args:
+            - "-e"
+            - "ANTHROPIC_API_KEY=sk-..."
+
+      The orchestrator runs a pre-flight check before every measure and stitch
+      phase: it verifies that podman is installed, the configured image exists,
+      and containers can start. If any check fails, the run aborts with a
+      diagnostic message.
+
+      Extract Claude credentials from the macOS Keychain:
+
+        mage credentials
+
+      This writes .secrets/claude.json, which the container mounts at runtime.
+
+  - title: Configuration Reference
+    content: |
+      All orchestrator settings live in configuration.yaml at the repository
+      root. Fields left empty take the defaults listed below.
+
+      project:
+        module_path        (required) Go module path, e.g. github.com/org/project
+        binary_name        (required) Name of the compiled binary
+        binary_dir         default: bin — output directory for binaries
+        main_package       (required) Path to the main.go entry point
+        go_source_dirs     (required) List of directories with Go source files
+        version_file       Path to version.go; updated by generator:stop
+        magefiles_dir      default: magefiles — directory skipped when deleting Go files
+        spec_globs         Map of label to glob pattern for word-count stats
+        seed_files         Map of destination path to template source path;
+                           templates are rendered with Version and ModulePath
+                           during generator:start and generator:reset
+
+      generation:
+        prefix             default: generation- — prefix for branch names
+        cycles             default: 0 (unlimited) — max measure+stitch cycles per run
+        branch             Specific branch to work on; auto-detected if empty
+        cleanup_dirs       Directories to remove after generator:stop or generator:reset
+
+      cobbler:
+        dir                        default: .cobbler/ — scratch directory
+        beads_dir                  default: .beads/   — issue tracker directory
+        max_stitch_issues          default: 0 (unlimited) — total stitch cap for a run
+        max_stitch_issues_per_cycle default: 10 — tasks per cycle before re-measuring
+        max_measure_issues         default: 1  — new issues per measure pass
+        user_prompt                Additional context injected into the measure prompt
+        measure_prompt             Path to custom measure template (overrides embedded)
+        stitch_prompt              Path to custom stitch template (overrides embedded)
+        planning_constitution      Path to planning constitution (overrides embedded)
+        execution_constitution     Path to execution constitution (overrides embedded)
+        design_constitution        Path to design constitution (overrides embedded)
+        estimated_lines_min        default: 250 — min estimated LOC per task
+        estimated_lines_max        default: 350 — max estimated LOC per task
+
+      podman:
+        image    (required) Container image for Claude execution
+        args     Additional podman run arguments before the image name
+
+      claude:
+        args              Default: --dangerously-skip-permissions -p --verbose
+                          --output-format stream-json
+        silence_agent     default: true — suppress Claude stdout
+        secrets_dir       default: .secrets — directory for credential files
+        default_token_file default: claude.json — credential filename
+        token_file        Overrides default_token_file if set
+        max_time_sec      default: 300 — seconds before Claude invocation is killed
+
+  - title: Mage Targets
+    content: |
+      | Target | Description |
+      |--------|-------------|
+      | init | Initialize the project (beads issue tracker) |
+      | reset | Full reset: cobbler, generator, beads |
+      | stats | Print Go LOC and documentation word counts as JSON |
+      | build | Compile the project binary |
+      | lint | Run golangci-lint |
+      | install | Run go install for the main package |
+      | clean | Remove build artifacts |
+      | credentials | Extract Claude credentials from macOS Keychain |
+      | analyze | Check cross-artifact consistency (orphaned PRDs, missing test suites) |
+      | cobbler:measure | Assess project state and propose tasks via Claude |
+      | cobbler:stitch | Pick ready tasks and execute them in isolated worktrees |
+      | cobbler:reset | Remove cobbler scratch directory |
+      | generator:start | Begin a new generation (create branch from main) |
+      | generator:run | Execute measure+stitch cycles within current generation |
+      | generator:resume | Recover from interrupted run and continue |
+      | generator:stop | Complete generation and merge into main |
+      | generator:list | Show active branches and past generations |
+      | generator:switch | Commit work and check out another generation branch |
+      | generator:reset | Destroy generation branches and return to clean main |
+      | beads:init | Initialize beads issue tracker |
+      | beads:reset | Clear beads issue history |
+
+references:
+  - docs/ARCHITECTURE.yaml
+  - docs/VISION.yaml
+  - docs/engineering/eng01-generation-workflow.yaml
+  - docs/engineering/eng02-prompt-templates.yaml

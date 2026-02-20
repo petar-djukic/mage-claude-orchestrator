@@ -397,10 +397,12 @@ related_documents:
     purpose: Measure and stitch phases, prompt templates, task execution
   - doc: docs/specs/product-requirements/prd005-metrics-collection.yaml
     purpose: Stats, invocation records, LOC snapshots
-  - doc: docs/engineering/eng01-generation-workflow.md
+  - doc: docs/engineering/eng01-generation-workflow.yaml
     purpose: Generation conventions and task branch naming
-  - doc: docs/engineering/eng02-prompt-templates.md
+  - doc: docs/engineering/eng02-prompt-templates.yaml
     purpose: Prompt template conventions and customization
+  - doc: docs/engineering/eng03-project-initialization.yaml
+    purpose: Prerequisites, scaffold procedure, configuration reference, Mage targets
 
 figures:
   - path: docs/ARCHITECTURE-diagrams.md

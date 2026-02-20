@@ -56,16 +56,24 @@ Read VISION.yaml and ARCHITECTURE.yaml for context. For PRDs scan existing `docs
 ## 4. After writing
 
 1. **Check completeness** against the issue Acceptance Criteria and the format rule checklist
-2. **Calculate metrics**: tokens used; run `mage stats` for LOC and doc word counts
+2. **Run `mage analyze`** to validate the documentation:
+   - No orphaned PRDs (all PRDs referenced by use cases)
+   - No missing test suites (all use cases have test suites)
+   - No broken references (touchpoints reference valid PRDs)
+   - All use cases in roadmap
 
-3. **Log metrics and close**:
+   Fix any issues before proceeding.
+
+3. **Calculate metrics**: tokens used; run `mage stats` for LOC and doc word counts
+
+4. **Log metrics and close**:
 
    ```bash
    bd comments add <issue-id> "tokens: <count>"
    bd close <issue-id>
    ```
 
-4. **Commit** changes and `.beads/issues.jsonl`:
+5. **Commit** changes and `.beads/issues.jsonl`:
 
    ```bash
    git add -A
@@ -77,7 +85,7 @@ Read VISION.yaml and ARCHITECTURE.yaml for context. For PRDs scan existing `docs
      Words (documentation):          <doc_words> (+<delta>)"
    ```
 
-5. If you found follow-up work, file it in Beads
+6. If you found follow-up work, file it in Beads
 
 ## 5. After completing an epic (documentation)
 

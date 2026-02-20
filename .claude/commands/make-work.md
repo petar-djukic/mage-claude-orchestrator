@@ -16,6 +16,11 @@ First, check the current state of work:
 1. Run `bd list` to see existing epics and issues
 2. Check what's in progress, what's completed, what's pending
 3. **Check road-map.yaml** for release schedule and use case status
+4. **Run `mage analyze`** to identify specification issues:
+   - Orphaned PRDs (not referenced by use cases)
+   - Missing test suites (use cases without test suites)
+   - Broken references (invalid touchpoints, missing files)
+   - Use cases not in roadmap
 
 Then, summarize:
 

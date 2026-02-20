@@ -34,4 +34,15 @@ Follow the detailed process in `.claude/commands/make-work.md` for:
 - Using `bd create` and dependency management
 - Proper syncing and committing
 
+## Validation
+After creating initial documentation, run **`mage analyze`** to check for:
+- Orphaned PRDs (not referenced by use cases)
+- Missing test suites (use cases without test suites)
+- Broken references (invalid touchpoints, missing files)
+- Use cases not in roadmap
+
+Fix any issues before finalizing.
+
+---
+
 Start by asking me questions to understand the project.

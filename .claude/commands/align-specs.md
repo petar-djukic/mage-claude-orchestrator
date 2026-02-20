@@ -14,7 +14,7 @@ Find all specification files in the project:
 - `docs/road-map.yaml` (if present)
 - `docs/specs/product-requirements/prd*.yaml`
 - `docs/specs/use-cases/rel*.yaml`
-- `docs/specs/test-suites/test*.yaml`
+- `docs/specs/test-suites/test-rel-*.yaml`
 - `docs/engineering/eng*.yaml`
 
 List every file found. Skip any that do not exist.
@@ -31,7 +31,13 @@ For each file, read it, then apply the constitution's format rules for that docu
 
 **Naming conventions**: Check each file's name against the `naming_conventions` block in the constitution (e.g. `prd[NNN]-[feature-name].yaml`, `rel[NN].[N]-uc[NNN]-[short-name].yaml`). Rename the file if it does not match. Update any cross-references in other files that point to the old name.
 
-**Traceability**: Every PRD must appear in at least one use case touchpoint. Every use case must appear in at least one test suite `traces` list. Flag gaps as `# TODO: link missing` on the relevant field — do not fabricate links.
+**Traceability**: `mage analyze` enforces five invariants. Fix what you can; flag the rest as `# TODO: link missing`. Do not fabricate IDs.
+
+1. Every PRD (`prd[NNN]-[name]`) must be referenced by at least one use case touchpoint. Touchpoints are parsed for bare tokens starting with `prd`, so embed the PRD ID directly in the touchpoint string (e.g. `"Component (prd001-feature R3)"`).
+2. Every use case must appear in at least one test suite `traces` list. Trace entries are parsed for tokens matching `rel[NN].[N]-uc[NNN]-[name]`, so use the full use case ID verbatim.
+3. Use case touchpoints must not reference PRD IDs that do not exist as files.
+4. Every use case must appear in `docs/road-map.yaml` under a release's `use_cases` list.
+5. Every release in `docs/road-map.yaml` must have a corresponding `docs/specs/test-suites/test-[release-id].yaml` file.
 
 Write each aligned file back to disk in place.
 

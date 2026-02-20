@@ -31,13 +31,7 @@ For each file, read it, then apply the constitution's format rules for that docu
 
 **Naming conventions**: Check each file's name against the `naming_conventions` block in the constitution (e.g. `prd[NNN]-[feature-name].yaml`, `rel[NN].[N]-uc[NNN]-[short-name].yaml`). Rename the file if it does not match. Update any cross-references in other files that point to the old name.
 
-**Traceability**: `mage analyze` enforces five invariants. Fix what you can; flag the rest as `# TODO: link missing`. Do not fabricate IDs.
-
-1. Every PRD (`prd[NNN]-[name]`) must be referenced by at least one use case touchpoint. Touchpoints are parsed for bare tokens starting with `prd`, so embed the PRD ID directly in the touchpoint string (e.g. `"Component (prd001-feature R3)"`).
-2. Every use case must appear in at least one test suite `traces` list. Trace entries are parsed for tokens matching `rel[NN].[N]-uc[NNN]-[name]`, so use the full use case ID verbatim.
-3. Use case touchpoints must not reference PRD IDs that do not exist as files.
-4. Every use case must appear in `docs/road-map.yaml` under a release's `use_cases` list.
-5. Every release in `docs/road-map.yaml` must have a corresponding `docs/specs/test-suites/test-[release-id].yaml` file.
+**Traceability**: Apply the `traceability_invariants` block (T1–T5) from the constitution. Fix what you can in the spec files. Flag gaps you cannot resolve without human input as `# TODO: link missing`. Do not fabricate IDs.
 
 Write each aligned file back to disk in place.
 

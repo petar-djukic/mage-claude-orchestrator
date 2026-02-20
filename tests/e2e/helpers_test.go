@@ -65,8 +65,8 @@ func prepareSnapshot() (string, func(), error) {
 	orch := orchestrator.New(cfg)
 
 	repoDir, err := orch.PrepareTestRepo(
-		"github.com/petar-djukic/mcp-calc",
-		"v0.20260214.2",
+		"github.com/petar-djukic/go-unix-utils",
+		"v0.20260220.2",
 		orchRoot,
 	)
 	if err != nil {

@@ -33,7 +33,7 @@ func (o *Orchestrator) Stitch() error {
 // of tasks completed. The caller (RunCycles) uses this to track the
 // total across all cycles against MaxStitchIssues.
 func (o *Orchestrator) RunStitch() (int, error) {
-	return o.RunStitchN(o.cfg.MaxStitchIssuesPerCycle)
+	return o.RunStitchN(o.cfg.Cobbler.MaxStitchIssuesPerCycle)
 }
 
 // RunStitchN processes up to n tasks and returns the count completed.
@@ -51,7 +51,7 @@ func (o *Orchestrator) RunStitchN(limit int) (int, error) {
 		return 0, err
 	}
 
-	branch, err := o.resolveBranch(o.cfg.GenerationBranch)
+	branch, err := o.resolveBranch(o.cfg.Generation.Branch)
 	if err != nil {
 		logf("stitch: resolveBranch failed: %v", err)
 		return 0, err
@@ -406,12 +406,12 @@ type StitchPromptData struct {
 }
 
 func (o *Orchestrator) buildStitchPrompt(task stitchTask) string {
-	tmplStr := o.cfg.StitchPrompt
+	tmplStr := o.cfg.Cobbler.StitchPrompt
 	if tmplStr == "" {
 		tmplStr = defaultStitchPromptTmpl
 	}
 	tmpl := template.Must(template.New("stitch").Parse(tmplStr))
-	executionConst := o.cfg.ExecutionConstitution
+	executionConst := o.cfg.Cobbler.ExecutionConstitution
 	if executionConst == "" {
 		executionConst = executionConstitution
 	}

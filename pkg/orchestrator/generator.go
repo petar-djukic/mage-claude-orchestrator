@@ -22,7 +22,7 @@ func (o *Orchestrator) GeneratorRun() error {
 		return fmt.Errorf("getting current branch: %w", err)
 	}
 
-	o.cfg.GenerationBranch = currentBranch
+	o.cfg.Generation.Branch = currentBranch
 	setGeneration(currentBranch)
 	defer clearGeneration()
 	return o.RunCycles("run")
@@ -31,7 +31,7 @@ func (o *Orchestrator) GeneratorRun() error {
 // GeneratorResume recovers from an interrupted generator:run and continues.
 // Reads generation branch from Config.GenerationBranch or auto-detects.
 func (o *Orchestrator) GeneratorResume() error {
-	branch := o.cfg.GenerationBranch
+	branch := o.cfg.Generation.Branch
 	if branch == "" {
 		resolved, err := o.resolveBranch("")
 		if err != nil {
@@ -40,8 +40,8 @@ func (o *Orchestrator) GeneratorResume() error {
 		branch = resolved
 	}
 
-	if !strings.HasPrefix(branch, o.cfg.GenPrefix) {
-		return fmt.Errorf("not a generation branch: %s\nSet generation_branch in configuration.yaml", branch)
+	if !strings.HasPrefix(branch, o.cfg.Generation.Prefix) {
+		return fmt.Errorf("not a generation branch: %s\nSet generation.branch in configuration.yaml", branch)
 	}
 	if !gitBranchExists(branch) {
 		return fmt.Errorf("branch does not exist: %s", branch)
@@ -77,7 +77,7 @@ func (o *Orchestrator) GeneratorResume() error {
 	logf("resume: resetting cobbler scratch")
 	o.CobblerReset()
 
-	o.cfg.GenerationBranch = branch
+	o.cfg.Generation.Branch = branch
 
 	// Drain existing ready issues before starting measure+stitch cycles.
 	logf("resume: draining existing ready issues")
@@ -96,21 +96,21 @@ func (o *Orchestrator) GeneratorResume() error {
 // (0 = unlimited).
 func (o *Orchestrator) RunCycles(label string) error {
 	logf("generator %s: starting (stitchTotal=%d stitchPerCycle=%d measure=%d safetyCycles=%d)",
-		label, o.cfg.MaxStitchIssues, o.cfg.MaxStitchIssuesPerCycle, o.cfg.MaxMeasureIssues, o.cfg.Cycles)
+		label, o.cfg.Cobbler.MaxStitchIssues, o.cfg.Cobbler.MaxStitchIssuesPerCycle, o.cfg.Cobbler.MaxMeasureIssues, o.cfg.Generation.Cycles)
 
 	totalStitched := 0
 	for cycle := 1; ; cycle++ {
-		if o.cfg.Cycles > 0 && cycle > o.cfg.Cycles {
-			logf("generator %s: reached max cycles (%d), stopping", label, o.cfg.Cycles)
+		if o.cfg.Generation.Cycles > 0 && cycle > o.cfg.Generation.Cycles {
+			logf("generator %s: reached max cycles (%d), stopping", label, o.cfg.Generation.Cycles)
 			break
 		}
 
 		// Determine how many tasks this cycle can stitch.
-		perCycle := o.cfg.MaxStitchIssuesPerCycle
-		if o.cfg.MaxStitchIssues > 0 {
-			remaining := o.cfg.MaxStitchIssues - totalStitched
+		perCycle := o.cfg.Cobbler.MaxStitchIssuesPerCycle
+		if o.cfg.Cobbler.MaxStitchIssues > 0 {
+			remaining := o.cfg.Cobbler.MaxStitchIssues - totalStitched
 			if remaining <= 0 {
-				logf("generator %s: reached total stitch limit (%d), stopping", label, o.cfg.MaxStitchIssues)
+				logf("generator %s: reached total stitch limit (%d), stopping", label, o.cfg.Cobbler.MaxStitchIssues)
 				break
 			}
 			if perCycle == 0 || remaining < perCycle {
@@ -149,7 +149,7 @@ func (o *Orchestrator) GeneratorStart() error {
 		return fmt.Errorf("switching to main: %w", err)
 	}
 
-	genName := o.cfg.GenPrefix + time.Now().Format("2006-01-02-15-04-05")
+	genName := o.cfg.Generation.Prefix + time.Now().Format("2006-01-02-15-04-05")
 	startTag := genName + "-start"
 
 	setGeneration(genName)
@@ -207,7 +207,7 @@ func (o *Orchestrator) GeneratorStart() error {
 // GeneratorStop completes a generation trail and merges it into main.
 // Uses Config.GenerationBranch, current branch, or auto-detects.
 func (o *Orchestrator) GeneratorStop() error {
-	branch := o.cfg.GenerationBranch
+	branch := o.cfg.Generation.Branch
 	if branch != "" {
 		if !gitBranchExists(branch) {
 			return fmt.Errorf("branch does not exist: %s", branch)
@@ -217,7 +217,7 @@ func (o *Orchestrator) GeneratorStop() error {
 		if err != nil {
 			return fmt.Errorf("getting current branch: %w", err)
 		}
-		if strings.HasPrefix(current, o.cfg.GenPrefix) {
+		if strings.HasPrefix(current, o.cfg.Generation.Prefix) {
 			branch = current
 			logf("generator:stop: stopping current branch %s", branch)
 		} else {
@@ -229,8 +229,8 @@ func (o *Orchestrator) GeneratorStop() error {
 		}
 	}
 
-	if !strings.HasPrefix(branch, o.cfg.GenPrefix) {
-		return fmt.Errorf("not a generation branch: %s\nSet generation_branch in configuration.yaml", branch)
+	if !strings.HasPrefix(branch, o.cfg.Generation.Prefix) {
+		return fmt.Errorf("not a generation branch: %s\nSet generation.branch in configuration.yaml", branch)
 	}
 
 	setGeneration(branch)
@@ -303,9 +303,9 @@ func (o *Orchestrator) mergeGenerationIntoMain(branch string) error {
 		}
 
 		// Update the version constant in the consuming project's version file.
-		if o.cfg.VersionFile != "" {
-			logf("generator:stop: writing version %s to %s", codeTag, o.cfg.VersionFile)
-			if err := writeVersionConst(o.cfg.VersionFile, codeTag); err != nil {
+		if o.cfg.Project.VersionFile != "" {
+			logf("generator:stop: writing version %s to %s", codeTag, o.cfg.Project.VersionFile)
+			if err := writeVersionConst(o.cfg.Project.VersionFile, codeTag); err != nil {
 				logf("generator:stop: version file warning: %v", err)
 			} else {
 				_ = gitStageAll()
@@ -327,7 +327,7 @@ func (o *Orchestrator) mergeGenerationIntoMain(branch string) error {
 
 // listGenerationBranches returns all generation-* branch names.
 func (o *Orchestrator) listGenerationBranches() []string {
-	return gitListBranches(o.cfg.GenPrefix + "*")
+	return gitListBranches(o.cfg.Generation.Prefix + "*")
 }
 
 // tagSuffixes lists the lifecycle tag suffixes in order.
@@ -336,7 +336,7 @@ var tagSuffixes = []string{"-start", "-finished", "-merged", "-abandoned"}
 // generationDate extracts the date portion (YYYY-MM-DD) from a
 // generation branch name like "generation-2026-02-12-07-13-55".
 func (o *Orchestrator) generationDate(branch string) string {
-	rest := strings.TrimPrefix(branch, o.cfg.GenPrefix)
+	rest := strings.TrimPrefix(branch, o.cfg.Generation.Prefix)
 	if rest == branch {
 		return ""
 	}
@@ -366,10 +366,10 @@ func (o *Orchestrator) generationRevision(branch string) int {
 	}
 
 	nameSet := make(map[string]bool)
-	for _, t := range gitListTags(o.cfg.GenPrefix + date + "-*") {
+	for _, t := range gitListTags(o.cfg.Generation.Prefix + date + "-*") {
 		nameSet[generationName(t)] = true
 	}
-	for _, b := range gitListBranches(o.cfg.GenPrefix + date + "-*") {
+	for _, b := range gitListBranches(o.cfg.Generation.Prefix + date + "-*") {
 		nameSet[b] = true
 	}
 
@@ -401,7 +401,7 @@ func generationName(tag string) string {
 // cleanupUnmergedTags renames tags for generations that were never
 // merged into a single -abandoned tag.
 func (o *Orchestrator) cleanupUnmergedTags() {
-	tags := gitListTags(o.cfg.GenPrefix + "*")
+	tags := gitListTags(o.cfg.Generation.Prefix + "*")
 	if len(tags) == 0 {
 		return
 	}
@@ -450,7 +450,7 @@ func (o *Orchestrator) resolveBranch(explicit string) (string, error) {
 		return branches[0], nil
 	default:
 		sort.Strings(branches)
-		return "", fmt.Errorf("multiple generation branches exist (%s); set generation_branch in configuration.yaml", strings.Join(branches, ", "))
+		return "", fmt.Errorf("multiple generation branches exist (%s); set generation.branch in configuration.yaml", strings.Join(branches, ", "))
 	}
 }
 
@@ -502,7 +502,7 @@ func ensureOnBranch(branch string) error {
 // GeneratorList shows active branches and past generations.
 func (o *Orchestrator) GeneratorList() error {
 	branches := o.listGenerationBranches()
-	tags := gitListTags(o.cfg.GenPrefix + "*")
+	tags := gitListTags(o.cfg.Generation.Prefix + "*")
 	current, _ := gitCurrentBranch()
 
 	nameSet := make(map[string]bool)
@@ -564,12 +564,12 @@ func (o *Orchestrator) GeneratorList() error {
 // GeneratorSwitch commits current work and checks out another generation branch.
 // Uses Config.GenerationBranch as the target.
 func (o *Orchestrator) GeneratorSwitch() error {
-	target := o.cfg.GenerationBranch
+	target := o.cfg.Generation.Branch
 	if target == "" {
-		return fmt.Errorf("set generation_branch in configuration.yaml\nAvailable branches: %s, main", strings.Join(o.listGenerationBranches(), ", "))
+		return fmt.Errorf("set generation.branch in configuration.yaml\nAvailable branches: %s, main", strings.Join(o.listGenerationBranches(), ", "))
 	}
 
-	if target != "main" && !strings.HasPrefix(target, o.cfg.GenPrefix) {
+	if target != "main" && !strings.HasPrefix(target, o.cfg.Generation.Prefix) {
 		return fmt.Errorf("not a generation branch or main: %s", target)
 	}
 	if !gitBranchExists(target) {
@@ -628,11 +628,11 @@ func (o *Orchestrator) GeneratorReset() error {
 	o.cleanupUnmergedTags()
 
 	logf("generator:reset: removing Go source directories")
-	for _, dir := range o.cfg.GoSourceDirs {
+	for _, dir := range o.cfg.Project.GoSourceDirs {
 		logf("generator:reset: removing %s", dir)
 		os.RemoveAll(dir)
 	}
-	os.RemoveAll(o.cfg.BinaryDir + "/")
+	os.RemoveAll(o.cfg.Project.BinaryDir + "/")
 	o.cleanupDirs()
 
 	logf("generator:reset: seeding Go sources and reinitializing go.mod")
@@ -655,10 +655,10 @@ func (o *Orchestrator) GeneratorReset() error {
 // clears build artifacts, seeds files, and reinitializes the Go module.
 func (o *Orchestrator) resetGoSources(version string) error {
 	o.deleteGoFiles(".")
-	for _, dir := range o.cfg.GoSourceDirs {
+	for _, dir := range o.cfg.Project.GoSourceDirs {
 		removeEmptyDirs(dir)
 	}
-	os.RemoveAll(o.cfg.BinaryDir + "/")
+	os.RemoveAll(o.cfg.Project.BinaryDir + "/")
 	if err := o.seedFiles(version); err != nil {
 		return fmt.Errorf("seeding files: %w", err)
 	}
@@ -669,10 +669,10 @@ func (o *Orchestrator) resetGoSources(version string) error {
 func (o *Orchestrator) seedFiles(version string) error {
 	data := SeedData{
 		Version:    version,
-		ModulePath: o.cfg.ModulePath,
+		ModulePath: o.cfg.Project.ModulePath,
 	}
 
-	for path, tmplStr := range o.cfg.SeedFiles {
+	for path, tmplStr := range o.cfg.Project.SeedFiles {
 		dir := filepath.Dir(path)
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
@@ -703,7 +703,7 @@ func (o *Orchestrator) reinitGoModule() error {
 	if err := o.goModInit(); err != nil {
 		return fmt.Errorf("go mod init: %w", err)
 	}
-	if err := goModEditReplace(o.cfg.ModulePath, "./"); err != nil {
+	if err := goModEditReplace(o.cfg.Project.ModulePath, "./"); err != nil {
 		return fmt.Errorf("go mod edit -replace: %w", err)
 	}
 	if err := goModTidy(); err != nil {
@@ -718,7 +718,7 @@ func (o *Orchestrator) deleteGoFiles(root string) {
 		if err != nil {
 			return nil
 		}
-		if info.IsDir() && (path == ".git" || path == o.cfg.MagefilesDir) {
+		if info.IsDir() && (path == ".git" || path == o.cfg.Project.MagefilesDir) {
 			return filepath.SkipDir
 		}
 		if !info.IsDir() && strings.HasSuffix(path, ".go") {
@@ -753,7 +753,7 @@ func removeEmptyDirs(root string) {
 
 // cleanupDirs removes all directories listed in Config.CleanupDirs.
 func (o *Orchestrator) cleanupDirs() {
-	for _, dir := range o.cfg.CleanupDirs {
+	for _, dir := range o.cfg.Generation.CleanupDirs {
 		logf("cleanupDirs: removing %s", dir)
 		os.RemoveAll(dir)
 	}

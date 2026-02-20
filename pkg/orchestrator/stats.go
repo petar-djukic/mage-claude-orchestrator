@@ -30,7 +30,7 @@ func (o *Orchestrator) CollectStats() (StatsRecord, error) {
 			return nil
 		}
 		if info.IsDir() {
-			if path == "vendor" || path == ".git" || path == o.cfg.BinaryDir {
+			if path == "vendor" || path == ".git" || path == o.cfg.Project.BinaryDir {
 				return filepath.SkipDir
 			}
 			return nil
@@ -39,7 +39,7 @@ func (o *Orchestrator) CollectStats() (StatsRecord, error) {
 			return nil
 		}
 		// Skip magefiles — they are build tooling, not project code.
-		if strings.HasPrefix(path, o.cfg.MagefilesDir) {
+		if strings.HasPrefix(path, o.cfg.Project.MagefilesDir) {
 			return nil
 		}
 		count, countErr := countLines(path)
@@ -58,7 +58,7 @@ func (o *Orchestrator) CollectStats() (StatsRecord, error) {
 	}
 
 	specWords := make(map[string]int)
-	for label, pattern := range o.cfg.SpecGlobs {
+	for label, pattern := range o.cfg.Project.SpecGlobs {
 		words, wordErr := countWordsInGlob(pattern)
 		if wordErr != nil {
 			return StatsRecord{}, wordErr

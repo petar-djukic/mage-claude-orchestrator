@@ -23,13 +23,13 @@ var embeddedDockerfile string
 //
 // Exposed as a mage target (e.g., mage buildImage).
 func (o *Orchestrator) BuildImage() error {
-	imageName := imageBaseName(o.cfg.PodmanImage)
+	imageName := imageBaseName(o.cfg.Podman.Image)
 	if imageName == "" {
-		return fmt.Errorf("podman_image not set in configuration; cannot determine image name")
+		return fmt.Errorf("podman.image not set in configuration; cannot determine image name")
 	}
 
 	// Prefer version from the project's version file; fall back to git tags.
-	tag := readVersionConst(o.cfg.VersionFile)
+	tag := readVersionConst(o.cfg.Project.VersionFile)
 	if tag == "" {
 		tag = latestVersionTag()
 	}
@@ -52,15 +52,15 @@ func (o *Orchestrator) BuildImage() error {
 // ensureImage checks whether the configured PodmanImage exists locally.
 // If missing, it builds it from the embedded Dockerfile.
 func (o *Orchestrator) ensureImage() error {
-	if podmanImageExists(o.cfg.PodmanImage) {
+	if podmanImageExists(o.cfg.Podman.Image) {
 		return nil
 	}
 
-	logf("ensureImage: %s not found locally, building from embedded Dockerfile", o.cfg.PodmanImage)
-	if err := buildFromEmbeddedDockerfile(o.cfg.PodmanImage); err != nil {
-		return fmt.Errorf("auto-building %s: %w", o.cfg.PodmanImage, err)
+	logf("ensureImage: %s not found locally, building from embedded Dockerfile", o.cfg.Podman.Image)
+	if err := buildFromEmbeddedDockerfile(o.cfg.Podman.Image); err != nil {
+		return fmt.Errorf("auto-building %s: %w", o.cfg.Podman.Image, err)
 	}
-	logf("ensureImage: built %s", o.cfg.PodmanImage)
+	logf("ensureImage: built %s", o.cfg.Podman.Image)
 	return nil
 }
 

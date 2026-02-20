@@ -48,16 +48,16 @@ type ProjectConfig struct {
 
 // GenerationConfig holds settings for the generation lifecycle.
 type GenerationConfig struct {
-	// GenPrefix is the prefix for generation branch names (default "generation-").
-	GenPrefix string `yaml:"gen_prefix"`
+	// Prefix is the prefix for generation branch names (default "generation-").
+	Prefix string `yaml:"prefix"`
 
 	// Cycles is the maximum number of measure+stitch cycles per run
 	// (default 0, meaning run until all issues are closed).
 	Cycles int `yaml:"cycles"`
 
-	// GenerationBranch selects a specific generation branch to work on.
+	// Branch selects a specific generation branch to work on.
 	// If empty, the orchestrator auto-detects from existing branches.
-	GenerationBranch string `yaml:"generation_branch"`
+	Branch string `yaml:"branch"`
 
 	// CleanupDirs lists directories to remove after generation stop or reset.
 	// Empty by default.
@@ -66,8 +66,8 @@ type GenerationConfig struct {
 
 // CobblerConfig holds settings for the measure and stitch workflows.
 type CobblerConfig struct {
-	// CobblerDir is the cobbler scratch directory (default ".cobbler/").
-	CobblerDir string `yaml:"cobbler_dir"`
+	// Dir is the cobbler scratch directory (default ".cobbler/").
+	Dir string `yaml:"dir"`
 
 	// BeadsDir is the beads database directory (default ".beads/").
 	BeadsDir string `yaml:"beads_dir"`
@@ -123,29 +123,19 @@ type CobblerConfig struct {
 
 // PodmanConfig holds settings for the podman container runtime.
 type PodmanConfig struct {
-	// PodmanImage is the container image for Claude execution (required).
+	// Image is the container image for Claude execution (required).
 	// Claude runs inside a podman container for isolation.
-	PodmanImage string `yaml:"podman_image"`
+	Image string `yaml:"image"`
 
-	// PodmanArgs are additional arguments passed to podman run before the image name.
-	PodmanArgs []string `yaml:"podman_args"`
-
-	// ClaudeMaxTimeSec is the maximum duration in seconds for a single Claude
-	// invocation (default 300, i.e. 5 minutes). If the time expires, the
-	// process is killed and the task is returned to beads.
-	ClaudeMaxTimeSec int `yaml:"claude_max_time_sec"`
-}
-
-// ClaudeTimeout returns the max time as a time.Duration.
-func (p *PodmanConfig) ClaudeTimeout() time.Duration {
-	return time.Duration(p.ClaudeMaxTimeSec) * time.Second
+	// Args are additional arguments passed to podman run before the image name.
+	Args []string `yaml:"args"`
 }
 
 // ClaudeConfig holds settings for the Claude CLI.
 type ClaudeConfig struct {
-	// ClaudeArgs are the CLI arguments for automated Claude execution.
+	// Args are the CLI arguments for automated Claude execution.
 	// If empty, defaults to the standard automated flags.
-	ClaudeArgs []string `yaml:"claude_args"`
+	Args []string `yaml:"args"`
 
 	// SilenceAgent suppresses Claude stdout when true (default true).
 	SilenceAgent *bool `yaml:"silence_agent"`
@@ -159,17 +149,27 @@ type ClaudeConfig struct {
 	// TokenFile overrides the credential filename in SecretsDir.
 	// If empty, DefaultTokenFile is used.
 	TokenFile string `yaml:"token_file"`
+
+	// MaxTimeSec is the maximum duration in seconds for a single Claude
+	// invocation (default 300, i.e. 5 minutes). If the time expires, the
+	// process is killed and the task is returned to beads.
+	MaxTimeSec int `yaml:"max_time_sec"`
+}
+
+// ClaudeTimeout returns the max time as a time.Duration.
+func (c *ClaudeConfig) ClaudeTimeout() time.Duration {
+	return time.Duration(c.MaxTimeSec) * time.Second
 }
 
 // Config holds all orchestrator settings. Consuming repos either
 // construct a Config in Go code and pass it to New(), or place a
 // configuration.yaml at the repository root and call NewFromFile().
 type Config struct {
-	ProjectConfig    `yaml:",inline"`
-	GenerationConfig `yaml:",inline"`
-	CobblerConfig    `yaml:",inline"`
-	PodmanConfig     `yaml:",inline"`
-	ClaudeConfig     `yaml:",inline"`
+	Project    ProjectConfig    `yaml:"project"`
+	Generation GenerationConfig `yaml:"generation"`
+	Cobbler    CobblerConfig    `yaml:"cobbler"`
+	Podman     PodmanConfig     `yaml:"podman"`
+	Claude     ClaudeConfig     `yaml:"claude"`
 }
 
 // DefaultConfigFile is the conventional configuration filename.
@@ -181,7 +181,7 @@ const DefaultConfigFile = "configuration.yaml"
 func DefaultConfig() Config {
 	t := true
 	cfg := Config{
-		ClaudeConfig: ClaudeConfig{SilenceAgent: &t},
+		Claude: ClaudeConfig{SilenceAgent: &t},
 	}
 	cfg.applyDefaults()
 	return cfg
@@ -213,60 +213,65 @@ type SeedData struct {
 // Silence returns true when Claude output should be suppressed.
 // Handles the nil-pointer case for the default (true).
 func (c *Config) Silence() bool {
-	if c.SilenceAgent == nil {
+	if c.Claude.SilenceAgent == nil {
 		return true
 	}
-	return *c.SilenceAgent
+	return *c.Claude.SilenceAgent
 }
 
 // EffectiveTokenFile returns the token file to use: TokenFile if set,
 // otherwise DefaultTokenFile.
 func (c *Config) EffectiveTokenFile() string {
-	if c.TokenFile != "" {
-		return c.TokenFile
+	if c.Claude.TokenFile != "" {
+		return c.Claude.TokenFile
 	}
-	return c.DefaultTokenFile
+	return c.Claude.DefaultTokenFile
+}
+
+// ClaudeTimeout returns the max Claude invocation time as a Duration.
+func (c *Config) ClaudeTimeout() time.Duration {
+	return c.Claude.ClaudeTimeout()
 }
 
 func (c *Config) applyDefaults() {
-	if c.BinaryDir == "" {
-		c.BinaryDir = "bin"
+	if c.Project.BinaryDir == "" {
+		c.Project.BinaryDir = "bin"
 	}
-	if c.GenPrefix == "" {
-		c.GenPrefix = "generation-"
+	if c.Generation.Prefix == "" {
+		c.Generation.Prefix = "generation-"
 	}
-	if c.BeadsDir == "" {
-		c.BeadsDir = ".beads/"
+	if c.Cobbler.BeadsDir == "" {
+		c.Cobbler.BeadsDir = ".beads/"
 	}
-	if c.CobblerDir == "" {
-		c.CobblerDir = ".cobbler/"
+	if c.Cobbler.Dir == "" {
+		c.Cobbler.Dir = ".cobbler/"
 	}
-	if c.MagefilesDir == "" {
-		c.MagefilesDir = "magefiles"
+	if c.Project.MagefilesDir == "" {
+		c.Project.MagefilesDir = "magefiles"
 	}
-	if c.SecretsDir == "" {
-		c.SecretsDir = ".secrets"
+	if c.Claude.SecretsDir == "" {
+		c.Claude.SecretsDir = ".secrets"
 	}
-	if c.DefaultTokenFile == "" {
-		c.DefaultTokenFile = "claude.json"
+	if c.Claude.DefaultTokenFile == "" {
+		c.Claude.DefaultTokenFile = "claude.json"
 	}
-	if len(c.ClaudeArgs) == 0 {
-		c.ClaudeArgs = defaultClaudeArgs
+	if len(c.Claude.Args) == 0 {
+		c.Claude.Args = defaultClaudeArgs
 	}
-	if c.MaxStitchIssuesPerCycle == 0 {
-		c.MaxStitchIssuesPerCycle = 10
+	if c.Cobbler.MaxStitchIssuesPerCycle == 0 {
+		c.Cobbler.MaxStitchIssuesPerCycle = 10
 	}
-	if c.MaxMeasureIssues == 0 {
-		c.MaxMeasureIssues = 1
+	if c.Cobbler.MaxMeasureIssues == 0 {
+		c.Cobbler.MaxMeasureIssues = 1
 	}
-	if c.EstimatedLinesMin == 0 {
-		c.EstimatedLinesMin = 250
+	if c.Cobbler.EstimatedLinesMin == 0 {
+		c.Cobbler.EstimatedLinesMin = 250
 	}
-	if c.EstimatedLinesMax == 0 {
-		c.EstimatedLinesMax = 350
+	if c.Cobbler.EstimatedLinesMax == 0 {
+		c.Cobbler.EstimatedLinesMax = 350
 	}
-	if c.ClaudeMaxTimeSec == 0 {
-		c.ClaudeMaxTimeSec = 300
+	if c.Claude.MaxTimeSec == 0 {
+		c.Claude.MaxTimeSec = 300
 	}
 }
 
@@ -287,7 +292,7 @@ func LoadConfig(path string) (Config, error) {
 	}
 
 	// Read seed file templates from disk.
-	for dest, src := range cfg.SeedFiles {
+	for dest, src := range cfg.Project.SeedFiles {
 		if src == "" {
 			continue
 		}
@@ -295,46 +300,46 @@ func LoadConfig(path string) (Config, error) {
 		if err != nil {
 			return Config{}, fmt.Errorf("reading seed file %s for %s: %w", src, dest, err)
 		}
-		cfg.SeedFiles[dest] = string(content)
+		cfg.Project.SeedFiles[dest] = string(content)
 	}
 
 	// Read prompt template files from disk.
-	if cfg.MeasurePrompt != "" {
-		content, err := os.ReadFile(cfg.MeasurePrompt)
+	if cfg.Cobbler.MeasurePrompt != "" {
+		content, err := os.ReadFile(cfg.Cobbler.MeasurePrompt)
 		if err != nil {
-			return Config{}, fmt.Errorf("reading measure prompt %s: %w", cfg.MeasurePrompt, err)
+			return Config{}, fmt.Errorf("reading measure prompt %s: %w", cfg.Cobbler.MeasurePrompt, err)
 		}
-		cfg.MeasurePrompt = string(content)
+		cfg.Cobbler.MeasurePrompt = string(content)
 	}
-	if cfg.StitchPrompt != "" {
-		content, err := os.ReadFile(cfg.StitchPrompt)
+	if cfg.Cobbler.StitchPrompt != "" {
+		content, err := os.ReadFile(cfg.Cobbler.StitchPrompt)
 		if err != nil {
-			return Config{}, fmt.Errorf("reading stitch prompt %s: %w", cfg.StitchPrompt, err)
+			return Config{}, fmt.Errorf("reading stitch prompt %s: %w", cfg.Cobbler.StitchPrompt, err)
 		}
-		cfg.StitchPrompt = string(content)
+		cfg.Cobbler.StitchPrompt = string(content)
 	}
 
 	// Read constitution files from disk.
-	if cfg.PlanningConstitution != "" {
-		content, err := os.ReadFile(cfg.PlanningConstitution)
+	if cfg.Cobbler.PlanningConstitution != "" {
+		content, err := os.ReadFile(cfg.Cobbler.PlanningConstitution)
 		if err != nil {
-			return Config{}, fmt.Errorf("reading planning constitution %s: %w", cfg.PlanningConstitution, err)
+			return Config{}, fmt.Errorf("reading planning constitution %s: %w", cfg.Cobbler.PlanningConstitution, err)
 		}
-		cfg.PlanningConstitution = string(content)
+		cfg.Cobbler.PlanningConstitution = string(content)
 	}
-	if cfg.ExecutionConstitution != "" {
-		content, err := os.ReadFile(cfg.ExecutionConstitution)
+	if cfg.Cobbler.ExecutionConstitution != "" {
+		content, err := os.ReadFile(cfg.Cobbler.ExecutionConstitution)
 		if err != nil {
-			return Config{}, fmt.Errorf("reading execution constitution %s: %w", cfg.ExecutionConstitution, err)
+			return Config{}, fmt.Errorf("reading execution constitution %s: %w", cfg.Cobbler.ExecutionConstitution, err)
 		}
-		cfg.ExecutionConstitution = string(content)
+		cfg.Cobbler.ExecutionConstitution = string(content)
 	}
-	if cfg.DesignConstitution != "" {
-		content, err := os.ReadFile(cfg.DesignConstitution)
+	if cfg.Cobbler.DesignConstitution != "" {
+		content, err := os.ReadFile(cfg.Cobbler.DesignConstitution)
 		if err != nil {
-			return Config{}, fmt.Errorf("reading design constitution %s: %w", cfg.DesignConstitution, err)
+			return Config{}, fmt.Errorf("reading design constitution %s: %w", cfg.Cobbler.DesignConstitution, err)
 		}
-		cfg.DesignConstitution = string(content)
+		cfg.Cobbler.DesignConstitution = string(content)
 	}
 
 	cfg.applyDefaults()

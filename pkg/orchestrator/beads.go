@@ -50,9 +50,9 @@ func (o *Orchestrator) BeadsReset() error {
 
 // beadsInitialized returns true if the beads directory exists.
 func (o *Orchestrator) beadsInitialized() bool {
-	_, err := os.Stat(o.cfg.BeadsDir)
+	_, err := os.Stat(o.cfg.Cobbler.BeadsDir)
 	exists := err == nil
-	logf("beadsInitialized: %s exists=%v", o.cfg.BeadsDir, exists)
+	logf("beadsInitialized: %s exists=%v", o.cfg.Cobbler.BeadsDir, exists)
 	return exists
 }
 
@@ -101,19 +101,19 @@ func (o *Orchestrator) beadsResetDB() error {
 
 	// bd init scans git history for issues.jsonl. Commit empty JSONL
 	// files so the next init starts with a clean slate.
-	logf("beadsResetDB: creating empty JSONL files in %s", o.cfg.BeadsDir)
-	if err := os.MkdirAll(o.cfg.BeadsDir, 0o755); err != nil {
+	logf("beadsResetDB: creating empty JSONL files in %s", o.cfg.Cobbler.BeadsDir)
+	if err := os.MkdirAll(o.cfg.Cobbler.BeadsDir, 0o755); err != nil {
 		logf("beadsResetDB: MkdirAll failed: %v", err)
-		return fmt.Errorf("recreating %s: %w", o.cfg.BeadsDir, err)
+		return fmt.Errorf("recreating %s: %w", o.cfg.Cobbler.BeadsDir, err)
 	}
 	for _, name := range []string{"issues.jsonl", "interactions.jsonl"} {
-		if err := os.WriteFile(o.cfg.BeadsDir+name, nil, 0o644); err != nil {
+		if err := os.WriteFile(o.cfg.Cobbler.BeadsDir+name, nil, 0o644); err != nil {
 			logf("beadsResetDB: WriteFile %s warning: %v", name, err)
 		}
 	}
 
 	logf("beadsResetDB: staging and committing empty JSONL files")
-	if err := gitStageDir(o.cfg.BeadsDir); err != nil {
+	if err := gitStageDir(o.cfg.Cobbler.BeadsDir); err != nil {
 		logf("beadsResetDB: gitStageDir warning: %v", err)
 	}
 	if err := gitCommit("Reset beads: clear issue history"); err != nil {
@@ -121,8 +121,8 @@ func (o *Orchestrator) beadsResetDB() error {
 	}
 
 	// Remove the directory again so bd init creates it fresh.
-	logf("beadsResetDB: removing %s so bd init creates it fresh", o.cfg.BeadsDir)
-	if err := os.RemoveAll(o.cfg.BeadsDir); err != nil {
+	logf("beadsResetDB: removing %s so bd init creates it fresh", o.cfg.Cobbler.BeadsDir)
+	if err := os.RemoveAll(o.cfg.Cobbler.BeadsDir); err != nil {
 		logf("beadsResetDB: RemoveAll warning: %v", err)
 	}
 

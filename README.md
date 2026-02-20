@@ -230,48 +230,72 @@ All options live in `configuration.yaml` at the repository root. For consuming p
 mage test:scaffold /path/to/your/project
 ```
 
-Alternatively, create `configuration.yaml` manually and set the project-specific fields (`module_path`, `binary_name`, `main_package`, `go_source_dirs`, `podman_image`).
+Alternatively, create `configuration.yaml` manually and set the project-specific fields (`project.module_path`, `project.binary_name`, `project.main_package`, `project.go_source_dirs`, `podman.image`).
 
 ### Configuration Reference
 
+Configuration is hierarchical. Top-level sections: `project`, `generation`, `cobbler`, `podman`, `claude`.
+
+#### project
+
 | Field | Default | Description |
 |-------|---------|-------------|
-| module_path | (required) | Go module path |
-| binary_name | (required) | Compiled binary name |
-| binary_dir | bin | Output directory for binaries |
-| main_package | (required) | Path to main.go entry point |
-| go_source_dirs | (required) | Directories with Go source files |
-| version_file | | Path to version.go; updated by generator:stop with the version tag |
-| magefiles_dir | magefiles | Directory skipped when deleting Go files |
-| spec_globs | {} | Label to glob pattern map for word-count stats (e.g., `prd: "docs/specs/product-requirements/*.yaml"`) |
-| seed_files | {} | Destination to template source paths; templates are rendered with Version and ModulePath during reset |
-| gen_prefix | generation- | Prefix for generation branch names |
-| cycles | 0 | Max measure+stitch cycles per run; 0 means run until all issues are closed |
-| generation_branch | | Specific generation branch to work on; auto-detected if empty |
-| cleanup_dirs | [] | Directories to remove after generation stop or reset |
-| cobbler_dir | .cobbler/ | Cobbler scratch directory |
-| beads_dir | .beads/ | Beads database directory |
-| max_stitch_issues | 0 | Total maximum stitch iterations for an entire run; 0 means unlimited |
-| max_stitch_issues_per_cycle | 10 | Maximum tasks stitch processes before calling measure again |
-| max_measure_issues | 1 | Maximum new issues to create per measure pass |
-| user_prompt | | Additional context for the measure prompt |
-| measure_prompt | pkg/orchestrator/prompts/measure.tmpl | File path to custom measure prompt template (defaults to embedded template) |
-| stitch_prompt | pkg/orchestrator/prompts/stitch.tmpl | File path to custom stitch prompt template (defaults to embedded template) |
-| planning_constitution | docs/constitutions/planning.yaml | File path to planning constitution; overrides embedded default |
-| execution_constitution | docs/constitutions/execution.yaml | File path to execution constitution; overrides embedded default |
-| design_constitution | docs/constitutions/design.yaml | File path to design constitution; overrides embedded default |
-| estimated_lines_min | 250 | Minimum estimated lines per task (passed to measure template) |
-| estimated_lines_max | 350 | Maximum estimated lines per task (passed to measure template) |
-| podman_image | (required) | Container image for Claude execution |
-| podman_args | [] | Additional podman run arguments |
-| claude_max_time_sec | 300 | Maximum seconds per Claude invocation; process killed on expiry |
-| claude_args | (see below) | CLI arguments for Claude execution |
-| silence_agent | true | Suppress Claude stdout |
-| secrets_dir | .secrets | Directory containing token files |
-| default_token_file | claude.json | Default credential filename |
-| token_file | | Override credential filename |
+| project.module_path | (required) | Go module path |
+| project.binary_name | (required) | Compiled binary name |
+| project.binary_dir | bin | Output directory for binaries |
+| project.main_package | (required) | Path to main.go entry point |
+| project.go_source_dirs | (required) | Directories with Go source files |
+| project.version_file | | Path to version.go; updated by generator:stop with the version tag |
+| project.magefiles_dir | magefiles | Directory skipped when deleting Go files |
+| project.spec_globs | {} | Label to glob pattern map for word-count stats (e.g., `prd: "docs/specs/product-requirements/*.yaml"`) |
+| project.seed_files | {} | Destination to template source paths; templates are rendered with Version and ModulePath during reset |
 
-Default claude_args: `--dangerously-skip-permissions -p --verbose --output-format stream-json`
+#### generation
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| generation.prefix | generation- | Prefix for generation branch names |
+| generation.cycles | 0 | Max measure+stitch cycles per run; 0 means run until all issues are closed |
+| generation.branch | | Specific generation branch to work on; auto-detected if empty |
+| generation.cleanup_dirs | [] | Directories to remove after generation stop or reset |
+
+#### cobbler
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| cobbler.dir | .cobbler/ | Cobbler scratch directory |
+| cobbler.beads_dir | .beads/ | Beads database directory |
+| cobbler.max_stitch_issues | 0 | Total maximum stitch iterations for an entire run; 0 means unlimited |
+| cobbler.max_stitch_issues_per_cycle | 10 | Maximum tasks stitch processes before calling measure again |
+| cobbler.max_measure_issues | 1 | Maximum new issues to create per measure pass |
+| cobbler.user_prompt | | Additional context for the measure prompt |
+| cobbler.measure_prompt | | File path to custom measure prompt template (defaults to embedded template) |
+| cobbler.stitch_prompt | | File path to custom stitch prompt template (defaults to embedded template) |
+| cobbler.planning_constitution | docs/constitutions/planning.yaml | File path to planning constitution; overrides embedded default |
+| cobbler.execution_constitution | docs/constitutions/execution.yaml | File path to execution constitution; overrides embedded default |
+| cobbler.design_constitution | docs/constitutions/design.yaml | File path to design constitution; overrides embedded default |
+| cobbler.estimated_lines_min | 250 | Minimum estimated lines per task (passed to measure template) |
+| cobbler.estimated_lines_max | 350 | Maximum estimated lines per task (passed to measure template) |
+
+#### podman
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| podman.image | (required) | Container image for Claude execution |
+| podman.args | [] | Additional podman run arguments |
+
+#### claude
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| claude.args | (see below) | CLI arguments for Claude execution |
+| claude.silence_agent | true | Suppress Claude stdout |
+| claude.secrets_dir | .secrets | Directory containing token files |
+| claude.default_token_file | claude.json | Default credential filename |
+| claude.token_file | | Override credential filename |
+| claude.max_time_sec | 300 | Maximum seconds per Claude invocation; process killed on expiry |
+
+Default `claude.args`: `--dangerously-skip-permissions -p --verbose --output-format stream-json`
 
 ## Mage Targets
 

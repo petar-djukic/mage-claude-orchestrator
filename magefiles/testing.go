@@ -50,8 +50,8 @@ func (Test) Cobbler() error {
 	logf("test:cobbler: starting regression suite")
 
 	cfg := baseCfg
-	cfg.MaxMeasureIssues = 3
-	cfg.SilenceAgent = boolPtr(true)
+	cfg.Cobbler.MaxMeasureIssues = 3
+	cfg.Claude.SilenceAgent = boolPtr(true)
 	orch := orchestrator.New(cfg)
 
 	// Reset to clean state.
@@ -112,9 +112,9 @@ func (Test) Generator() error {
 	// Sub-test 2: start/run(1 cycle)/stop.
 	logf("test:generator: sub-test 2 — start/run/stop (1 cycle)")
 	cfg2 := baseCfg
-	cfg2.SilenceAgent = boolPtr(true)
-	cfg2.MaxMeasureIssues = 1
-	cfg2.Cycles = 1
+	cfg2.Claude.SilenceAgent = boolPtr(true)
+	cfg2.Cobbler.MaxMeasureIssues = 1
+	cfg2.Generation.Cycles = 1
 	orch2 := orchestrator.New(cfg2)
 	if err := orch2.FullReset(); err != nil {
 		return fmt.Errorf("sub-test 2 reset: %w", err)
@@ -133,10 +133,10 @@ func (Test) Generator() error {
 	// Sub-test 3: stitch per-cycle limit.
 	logf("test:generator: sub-test 3 — per-cycle limit")
 	cfg3 := baseCfg
-	cfg3.SilenceAgent = boolPtr(true)
-	cfg3.MaxMeasureIssues = 1
-	cfg3.MaxStitchIssuesPerCycle = 2
-	cfg3.Cycles = 1
+	cfg3.Claude.SilenceAgent = boolPtr(true)
+	cfg3.Cobbler.MaxMeasureIssues = 1
+	cfg3.Cobbler.MaxStitchIssuesPerCycle = 2
+	cfg3.Generation.Cycles = 1
 	orch3 := orchestrator.New(cfg3)
 	if err := orch3.FullReset(); err != nil {
 		return fmt.Errorf("sub-test 3 reset: %w", err)
@@ -166,9 +166,9 @@ func (Test) Resume() error {
 	logf("test:resume: starting recovery test")
 
 	cfg := baseCfg
-	cfg.SilenceAgent = boolPtr(true)
-	cfg.MaxMeasureIssues = 1
-	cfg.Cycles = 1
+	cfg.Claude.SilenceAgent = boolPtr(true)
+	cfg.Cobbler.MaxMeasureIssues = 1
+	cfg.Generation.Cycles = 1
 	orch := orchestrator.New(cfg)
 
 	// Reset and start a generation.
@@ -191,7 +191,7 @@ func (Test) Resume() error {
 	if err := orch.GeneratorSwitch(); err != nil {
 		// GeneratorSwitch requires GenerationBranch to be set.
 		// Set it to main for the switch.
-		cfg.GenerationBranch = "main"
+		cfg.Generation.Branch = "main"
 		switchOrch := orchestrator.New(cfg)
 		if err := switchOrch.GeneratorSwitch(); err != nil {
 			return fmt.Errorf("switch to main: %w", err)
@@ -200,7 +200,7 @@ func (Test) Resume() error {
 
 	// Resume — should auto-detect the generation branch and stitch.
 	logf("test:resume: resuming")
-	cfg.GenerationBranch = "" // clear so resume auto-detects
+	cfg.Generation.Branch = "" // clear so resume auto-detects
 	resumeOrch := orchestrator.New(cfg)
 	if err := resumeOrch.GeneratorResume(); err != nil {
 		return fmt.Errorf("resume: %w", err)

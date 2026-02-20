@@ -32,7 +32,7 @@ func (o *Orchestrator) Measure() error {
 // MeasurePrompt prints the measure prompt that would be sent to Claude to stdout.
 // This is useful for inspecting or debugging the prompt without invoking Claude.
 func (o *Orchestrator) MeasurePrompt() error {
-	prompt := o.buildMeasurePrompt("", "", o.cfg.MaxMeasureIssues, "measure-out.yaml")
+	prompt := o.buildMeasurePrompt("", "", o.cfg.Cobbler.MaxMeasureIssues, "measure-out.yaml")
 	fmt.Print(prompt)
 	return nil
 }
@@ -54,7 +54,7 @@ func (o *Orchestrator) RunMeasure() error {
 		return err
 	}
 
-	branch, err := o.resolveBranch(o.cfg.GenerationBranch)
+	branch, err := o.resolveBranch(o.cfg.Generation.Branch)
 	if err != nil {
 		logf("measure: resolveBranch failed: %v", err)
 		return err
@@ -66,12 +66,12 @@ func (o *Orchestrator) RunMeasure() error {
 		return fmt.Errorf("switching to branch: %w", err)
 	}
 
-	_ = os.MkdirAll(o.cfg.CobblerDir, 0o755)
+	_ = os.MkdirAll(o.cfg.Cobbler.Dir, 0o755)
 	timestamp := time.Now().Format("20060102-150405")
-	outputFile := filepath.Join(o.cfg.CobblerDir, fmt.Sprintf("measure-%s.yaml", timestamp))
+	outputFile := filepath.Join(o.cfg.Cobbler.Dir, fmt.Sprintf("measure-%s.yaml", timestamp))
 
 	// Clean up old measure temp files.
-	matches, _ := filepath.Glob(o.cfg.CobblerDir + "measure-*.yaml")
+	matches, _ := filepath.Glob(o.cfg.Cobbler.Dir + "measure-*.yaml")
 	if len(matches) > 0 {
 		logf("measure: cleaning %d old measure temp file(s)", len(matches))
 	}
@@ -86,7 +86,7 @@ func (o *Orchestrator) RunMeasure() error {
 	commitSHA, _ := gitRevParseHEAD()
 
 	logf("measure: found %d existing issue(s), maxMeasureIssues=%d, commit=%s",
-		issueCount, o.cfg.MaxMeasureIssues, commitSHA)
+		issueCount, o.cfg.Cobbler.MaxMeasureIssues, commitSHA)
 	logf("measure: outputFile=%s", outputFile)
 
 	// Create a beads tracking issue for this measure invocation.
@@ -97,7 +97,7 @@ func (o *Orchestrator) RunMeasure() error {
 	logf("measure: locBefore prod=%d test=%d", locBefore.Production, locBefore.Test)
 
 	// Build and run prompt.
-	prompt := o.buildMeasurePrompt(o.cfg.UserPrompt, existingIssues, o.cfg.MaxMeasureIssues, outputFile)
+	prompt := o.buildMeasurePrompt(o.cfg.Cobbler.UserPrompt, existingIssues, o.cfg.Cobbler.MaxMeasureIssues, outputFile)
 	logf("measure: prompt built, length=%d bytes", len(prompt))
 
 	logf("measure: invoking Claude")
@@ -168,7 +168,7 @@ func (o *Orchestrator) createMeasureTrackingIssue(branch, commitSHA string, exis
 	title := fmt.Sprintf("measure: plan on %s at %s", branch, truncateSHA(commitSHA))
 	description := fmt.Sprintf(
 		"Measure invocation.\n\nBranch: %s\nCommit: %s\nExisting issues: %d\nMax new issues: %d",
-		branch, commitSHA, existingIssueCount, o.cfg.MaxMeasureIssues,
+		branch, commitSHA, existingIssueCount, o.cfg.Cobbler.MaxMeasureIssues,
 	)
 
 	out, err := bdCreateTask(title, description)
@@ -309,14 +309,14 @@ func readFileOrEmpty(path string) string {
 }
 
 func (o *Orchestrator) buildMeasurePrompt(userInput, existingIssues string, limit int, outputPath string) string {
-	tmplStr := o.cfg.MeasurePrompt
+	tmplStr := o.cfg.Cobbler.MeasurePrompt
 	if tmplStr == "" {
 		tmplStr = defaultMeasurePromptTmpl
 	}
 
 	tmpl := template.Must(template.New("measure").Parse(tmplStr))
 
-	planningConst := o.cfg.PlanningConstitution
+	planningConst := o.cfg.Cobbler.PlanningConstitution
 	if planningConst == "" {
 		planningConst = planningConstitution
 	}
@@ -325,8 +325,8 @@ func (o *Orchestrator) buildMeasurePrompt(userInput, existingIssues string, limi
 		Limit:                limit,
 		OutputPath:           outputPath,
 		UserInput:            userInput,
-		LinesMin:             o.cfg.EstimatedLinesMin,
-		LinesMax:             o.cfg.EstimatedLinesMax,
+		LinesMin:             o.cfg.Cobbler.EstimatedLinesMin,
+		LinesMax:             o.cfg.Cobbler.EstimatedLinesMax,
 		PlanningConstitution: planningConst,
 		Vision:               readFileOrEmpty("docs/VISION.yaml"),
 		Architecture:         readFileOrEmpty("docs/ARCHITECTURE.yaml"),
@@ -418,7 +418,7 @@ func (o *Orchestrator) importIssues(yamlFile string) ([]string, error) {
 	logf("importIssues: %d of %d issue(s) imported", len(ids), len(issues))
 
 	// Append new issues to the persistent measure list.
-	appendMeasureLog(o.cfg.CobblerDir, issues)
+	appendMeasureLog(o.cfg.Cobbler.Dir, issues)
 
 	return ids, nil
 }

@@ -221,7 +221,7 @@ func bdSync() error {
 }
 
 func (o *Orchestrator) bdAdminReset() error {
-	if _, err := os.Stat(o.cfg.BeadsDir); os.IsNotExist(err) {
+	if _, err := os.Stat(o.cfg.Cobbler.BeadsDir); os.IsNotExist(err) {
 		return nil // nothing to reset
 	}
 	// Stop the daemon before destroying the database; otherwise the
@@ -230,8 +230,8 @@ func (o *Orchestrator) bdAdminReset() error {
 	if err := exec.Command(binBd, "admin", "reset", "--force").Run(); err != nil {
 		// Fallback: remove the directory directly. This handles legacy
 		// databases or bd version mismatches where the CLI command fails.
-		logf("bdAdminReset: bd admin reset failed (%v), falling back to rm -rf %s", err, o.cfg.BeadsDir)
-		return os.RemoveAll(o.cfg.BeadsDir)
+		logf("bdAdminReset: bd admin reset failed (%v), falling back to rm -rf %s", err, o.cfg.Cobbler.BeadsDir)
+		return os.RemoveAll(o.cfg.Cobbler.BeadsDir)
 	}
 	return nil
 }
@@ -338,7 +338,7 @@ func podmanBuild(dockerfile string, tags ...string) error {
 // Go helpers.
 
 func (o *Orchestrator) goModInit() error {
-	return exec.Command(binGo, "mod", "init", o.cfg.ModulePath).Run()
+	return exec.Command(binGo, "mod", "init", o.cfg.Project.ModulePath).Run()
 }
 
 func goModEditReplace(old, new string) error {

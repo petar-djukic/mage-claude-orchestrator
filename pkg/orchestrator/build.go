@@ -13,16 +13,16 @@ import (
 // Build compiles the project binary. If MainPackage is empty, the
 // target is skipped.
 func (o *Orchestrator) Build() error {
-	if o.cfg.MainPackage == "" {
+	if o.cfg.Project.MainPackage == "" {
 		logf("build: skipping (no main_package configured)")
 		return nil
 	}
-	outPath := filepath.Join(o.cfg.BinaryDir, o.cfg.BinaryName)
-	logf("build: go build -o %s %s", outPath, o.cfg.MainPackage)
-	if err := os.MkdirAll(o.cfg.BinaryDir, 0o755); err != nil {
+	outPath := filepath.Join(o.cfg.Project.BinaryDir, o.cfg.Project.BinaryName)
+	logf("build: go build -o %s %s", outPath, o.cfg.Project.MainPackage)
+	if err := os.MkdirAll(o.cfg.Project.BinaryDir, 0o755); err != nil {
 		return fmt.Errorf("creating output directory: %w", err)
 	}
-	cmd := exec.Command(binGo, "build", "-o", outPath, o.cfg.MainPackage)
+	cmd := exec.Command(binGo, "build", "-o", outPath, o.cfg.Project.MainPackage)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -87,12 +87,12 @@ func (o *Orchestrator) TestAll() error {
 // Install runs go install for the main package. If MainPackage
 // is empty, the target is skipped.
 func (o *Orchestrator) Install() error {
-	if o.cfg.MainPackage == "" {
+	if o.cfg.Project.MainPackage == "" {
 		logf("install: skipping (no main_package configured)")
 		return nil
 	}
-	logf("install: go install %s", o.cfg.MainPackage)
-	cmd := exec.Command(binGo, "install", o.cfg.MainPackage)
+	logf("install: go install %s", o.cfg.Project.MainPackage)
+	cmd := exec.Command(binGo, "install", o.cfg.Project.MainPackage)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -104,9 +104,9 @@ func (o *Orchestrator) Install() error {
 
 // Clean removes the build artifact directory.
 func (o *Orchestrator) Clean() error {
-	logf("clean: removing %s", o.cfg.BinaryDir)
-	if err := os.RemoveAll(o.cfg.BinaryDir); err != nil {
-		return fmt.Errorf("removing %s: %w", o.cfg.BinaryDir, err)
+	logf("clean: removing %s", o.cfg.Project.BinaryDir)
+	if err := os.RemoveAll(o.cfg.Project.BinaryDir); err != nil {
+		return fmt.Errorf("removing %s: %w", o.cfg.Project.BinaryDir, err)
 	}
 	logf("clean: done")
 	return nil
@@ -115,9 +115,9 @@ func (o *Orchestrator) Clean() error {
 // ExtractCredentials reads Claude credentials from the macOS Keychain
 // and writes them to SecretsDir/TokenFile.
 func (o *Orchestrator) ExtractCredentials() error {
-	outPath := filepath.Join(o.cfg.SecretsDir, o.cfg.EffectiveTokenFile())
+	outPath := filepath.Join(o.cfg.Claude.SecretsDir, o.cfg.EffectiveTokenFile())
 	logf("credentials: extracting to %s", outPath)
-	if err := os.MkdirAll(o.cfg.SecretsDir, 0o700); err != nil {
+	if err := os.MkdirAll(o.cfg.Claude.SecretsDir, 0o700); err != nil {
 		return fmt.Errorf("creating secrets directory: %w", err)
 	}
 	out, err := exec.Command(binSecurity, "find-generic-password",

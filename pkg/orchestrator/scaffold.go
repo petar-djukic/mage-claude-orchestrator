@@ -82,13 +82,13 @@ func (o *Orchestrator) Scaffold(targetDir, orchestratorRoot string) error {
 
 	// 3. Generate seed files and configuration.yaml in the target root.
 	cfg := DefaultConfig()
-	cfg.ModulePath = modulePath
-	cfg.BinaryName = binName
-	cfg.MainPackage = mainPkg
-	cfg.GoSourceDirs = srcDirs
-	cfg.PlanningConstitution = "docs/constitutions/planning.yaml"
-	cfg.ExecutionConstitution = "docs/constitutions/execution.yaml"
-	cfg.DesignConstitution = "docs/constitutions/design.yaml"
+	cfg.Project.ModulePath = modulePath
+	cfg.Project.BinaryName = binName
+	cfg.Project.MainPackage = mainPkg
+	cfg.Project.GoSourceDirs = srcDirs
+	cfg.Cobbler.PlanningConstitution = "docs/constitutions/planning.yaml"
+	cfg.Cobbler.ExecutionConstitution = "docs/constitutions/execution.yaml"
+	cfg.Cobbler.DesignConstitution = "docs/constitutions/design.yaml"
 
 	// When a main package is detected, create a version.go seed template
 	// so that after generator:reset the project has a minimal compilable
@@ -99,8 +99,8 @@ func (o *Orchestrator) Scaffold(targetDir, orchestratorRoot string) error {
 		if err != nil {
 			return fmt.Errorf("creating seed template: %w", err)
 		}
-		cfg.SeedFiles = map[string]string{seedPath: tmplPath}
-		cfg.VersionFile = seedPath
+		cfg.Project.SeedFiles = map[string]string{seedPath: tmplPath}
+		cfg.Project.VersionFile = seedPath
 		logf("scaffold: created seed template %s -> %s", seedPath, tmplPath)
 	}
 

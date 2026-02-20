@@ -106,14 +106,14 @@ func parseClaudeTokens(output []byte) ClaudeResult {
 // are present. When PodmanImage is empty, it checks that the claude
 // binary is on PATH.
 func (o *Orchestrator) checkClaude() error {
-	if o.cfg.PodmanImage != "" {
+	if o.cfg.Podman.Image != "" {
 		if err := o.checkPodman(); err != nil {
 			return err
 		}
 		return o.ensureCredentials()
 	}
 	if _, err := exec.LookPath(binClaude); err != nil {
-		return fmt.Errorf("claude not found on PATH; install Claude Code or set podman_image in configuration.yaml")
+		return fmt.Errorf("claude not found on PATH; install Claude Code or set podman.image in configuration.yaml")
 	}
 	return nil
 }
@@ -122,7 +122,7 @@ func (o *Orchestrator) checkClaude() error {
 // If missing, it attempts to extract credentials from the macOS Keychain.
 // Returns an error if the file still does not exist after the attempt.
 func (o *Orchestrator) ensureCredentials() error {
-	credPath := filepath.Join(o.cfg.SecretsDir, o.cfg.EffectiveTokenFile())
+	credPath := filepath.Join(o.cfg.Claude.SecretsDir, o.cfg.EffectiveTokenFile())
 	if _, err := os.Stat(credPath); err == nil {
 		return nil
 	}
@@ -170,7 +170,7 @@ func clearClaudeHistory() {
 // ClaudeMaxTimeSec is exceeded.
 func (o *Orchestrator) runClaude(prompt, dir string, silence bool) (ClaudeResult, error) {
 	logf("runClaude: promptLen=%d dir=%q silence=%v container=%v",
-		len(prompt), dir, silence, o.cfg.PodmanImage != "")
+		len(prompt), dir, silence, o.cfg.Podman.Image != "")
 
 	clearClaudeHistory()
 
@@ -188,7 +188,7 @@ func (o *Orchestrator) runClaude(prompt, dir string, silence bool) (ClaudeResult
 	defer cancel()
 
 	var cmd *exec.Cmd
-	if o.cfg.PodmanImage != "" {
+	if o.cfg.Podman.Image != "" {
 		cmd = o.buildPodmanCmd(ctx, workDir)
 	} else {
 		cmd = o.buildDirectCmd(ctx, workDir)
@@ -228,7 +228,7 @@ func (o *Orchestrator) buildPodmanCmd(ctx context.Context, workDir string) *exec
 	}
 
 	// Mount credentials into the container at the path Claude Code expects.
-	credPath := filepath.Join(o.cfg.SecretsDir, o.cfg.EffectiveTokenFile())
+	credPath := filepath.Join(o.cfg.Claude.SecretsDir, o.cfg.EffectiveTokenFile())
 	if absCredPath, err := filepath.Abs(credPath); err == nil {
 		if _, err := os.Stat(absCredPath); err == nil {
 			args = append(args,
@@ -236,10 +236,10 @@ func (o *Orchestrator) buildPodmanCmd(ctx context.Context, workDir string) *exec
 		}
 	}
 
-	args = append(args, o.cfg.PodmanArgs...)
-	args = append(args, o.cfg.PodmanImage)
+	args = append(args, o.cfg.Podman.Args...)
+	args = append(args, o.cfg.Podman.Image)
 	args = append(args, binClaude)
-	args = append(args, o.cfg.ClaudeArgs...)
+	args = append(args, o.cfg.Claude.Args...)
 
 	logf("runClaude: exec %s %v (timeout=%s)", binPodman, args, o.cfg.ClaudeTimeout())
 	return exec.CommandContext(ctx, binPodman, args...)
@@ -248,7 +248,7 @@ func (o *Orchestrator) buildPodmanCmd(ctx context.Context, workDir string) *exec
 // buildDirectCmd constructs the exec.Cmd for running Claude directly
 // on the host.
 func (o *Orchestrator) buildDirectCmd(ctx context.Context, workDir string) *exec.Cmd {
-	args := append([]string{}, o.cfg.ClaudeArgs...)
+	args := append([]string{}, o.cfg.Claude.Args...)
 
 	logf("runClaude: exec %s %v (timeout=%s)", binClaude, args, o.cfg.ClaudeTimeout())
 	cmd := exec.CommandContext(ctx, binClaude, args...)
@@ -259,9 +259,9 @@ func (o *Orchestrator) buildDirectCmd(ctx context.Context, workDir string) *exec
 // logConfig prints the resolved configuration for debugging.
 func (o *Orchestrator) logConfig(target string) {
 	logf("%s config: silence=%v stitchTotal=%d stitchPerCycle=%d measure=%d generationBranch=%q",
-		target, o.cfg.Silence(), o.cfg.MaxStitchIssues, o.cfg.MaxStitchIssuesPerCycle, o.cfg.MaxMeasureIssues, o.cfg.GenerationBranch)
-	if o.cfg.UserPrompt != "" {
-		logf("%s config: userPrompt=%q", target, o.cfg.UserPrompt)
+		target, o.cfg.Silence(), o.cfg.Cobbler.MaxStitchIssues, o.cfg.Cobbler.MaxStitchIssuesPerCycle, o.cfg.Cobbler.MaxMeasureIssues, o.cfg.Generation.Branch)
+	if o.cfg.Cobbler.UserPrompt != "" {
+		logf("%s config: userPrompt=%q", target, o.cfg.Cobbler.UserPrompt)
 	}
 }
 
@@ -286,8 +286,8 @@ func (o *Orchestrator) hasOpenIssues() bool {
 
 // CobblerReset removes the cobbler scratch directory.
 func (o *Orchestrator) CobblerReset() error {
-	logf("cobblerReset: removing %s", o.cfg.CobblerDir)
-	os.RemoveAll(o.cfg.CobblerDir)
+	logf("cobblerReset: removing %s", o.cfg.Cobbler.Dir)
+	os.RemoveAll(o.cfg.Cobbler.Dir)
 	logf("cobblerReset: done")
 	return nil
 }
@@ -298,7 +298,7 @@ func (o *Orchestrator) beadsCommit(msg string) {
 	if err := bdSync(); err != nil {
 		logf("beadsCommit: bdSync warning: %v", err)
 	}
-	if err := gitStageDir(o.cfg.BeadsDir); err != nil {
+	if err := gitStageDir(o.cfg.Cobbler.BeadsDir); err != nil {
 		logf("beadsCommit: gitStageDir warning: %v", err)
 	}
 	if err := gitCommitAllowEmpty(msg); err != nil {

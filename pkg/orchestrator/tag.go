@@ -47,9 +47,9 @@ func (o *Orchestrator) Tag() error {
 	}
 
 	// Update the version constant in the version file if configured.
-	if o.cfg.VersionFile != "" {
-		logf("tag: writing version %s to %s", tag, o.cfg.VersionFile)
-		if err := writeVersionConst(o.cfg.VersionFile, tag); err != nil {
+	if o.cfg.Project.VersionFile != "" {
+		logf("tag: writing version %s to %s", tag, o.cfg.Project.VersionFile)
+		if err := writeVersionConst(o.cfg.Project.VersionFile, tag); err != nil {
 			logf("tag: version file warning: %v", err)
 		} else {
 			_ = gitStageAll()

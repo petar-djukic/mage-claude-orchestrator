@@ -160,6 +160,8 @@ func (pw *progressWriter) logLine(line []byte) {
 	case "result":
 		logf("[%s] done: %d turn(s), tokens(in=%d out=%d)", total, pw.turn,
 			msg.Usage.InputTokens, msg.Usage.OutputTokens)
+	default:
+		logf("[%s +%s] event: %s", total, step, msg.Type)
 	}
 }
 

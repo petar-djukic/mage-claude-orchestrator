@@ -13,6 +13,7 @@
 package e2e_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -141,17 +142,20 @@ func runMage(t *testing.T, dir string, target ...string) error {
 }
 
 // runMageOut runs a mage target in dir and returns combined stdout+stderr.
+// Output is streamed to os.Stderr in real-time (visible with go test -v)
+// so that long-running Claude invocations show progress.
 func runMageOut(t *testing.T, dir string, target ...string) (string, error) {
 	t.Helper()
 	args := append([]string{"-d", "."}, target...)
 	cmd := exec.Command("mage", args...)
 	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	s := string(out)
-	if s != "" {
-		t.Logf("mage %s:\n%s", strings.Join(target, " "), s)
-	}
-	return s, err
+
+	var buf bytes.Buffer
+	cmd.Stdout = io.MultiWriter(os.Stderr, &buf)
+	cmd.Stderr = io.MultiWriter(os.Stderr, &buf)
+
+	err := cmd.Run()
+	return buf.String(), err
 }
 
 // requiresClaude skips the test unless E2E_CLAUDE is set to a non-empty value.

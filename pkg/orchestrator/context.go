@@ -27,8 +27,16 @@ type ProjectContext struct {
 	Specs          *SpecsCollection   `yaml:"specs,omitempty"`
 	Engineering    []*EngineeringDoc  `yaml:"engineering,omitempty"`
 	Constitutions  *ConstitutionsDoc  `yaml:"constitutions,omitempty"`
+	SourceCode     []SourceFile       `yaml:"source_code,omitempty"`
 	Issues         []ContextIssue     `yaml:"issues,omitempty"`
 	Extra          []*NamedDoc        `yaml:"extra,omitempty"`
+}
+
+// SourceFile holds the path and content of a single source file
+// for inclusion in the project context.
+type SourceFile struct {
+	Path    string `yaml:"path"`
+	Content string `yaml:"content"`
 }
 
 // ---------------------------------------------------------------------------
@@ -503,13 +511,49 @@ func parseIssuesJSON(jsonStr string) []ContextIssue {
 	return issues
 }
 
+// loadSourceFiles walks the given directories and reads all .go files,
+// returning them sorted by path for deterministic prompt output.
+func loadSourceFiles(dirs []string) []SourceFile {
+	var files []SourceFile
+	for _, dir := range dirs {
+		err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return nil
+			}
+			if info.IsDir() {
+				return nil
+			}
+			if !strings.HasSuffix(path, ".go") {
+				return nil
+			}
+			data, readErr := os.ReadFile(path)
+			if readErr != nil {
+				logf("loadSourceFiles: read error for %s: %v", path, readErr)
+				return nil
+			}
+			files = append(files, SourceFile{
+				Path:    path,
+				Content: string(data),
+			})
+			return nil
+		})
+		if err != nil {
+			logf("loadSourceFiles: walk error for %s: %v", dir, err)
+		}
+	}
+	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
+	logf("loadSourceFiles: %d file(s) from %d dir(s)", len(files), len(dirs))
+	return files
+}
+
 // ---------------------------------------------------------------------------
 // Assembly
 // ---------------------------------------------------------------------------
 
-// buildProjectContext reads all docs/ files, parses existing issues,
-// and assembles them into a single YAML document for prompt injection.
-func buildProjectContext(existingIssuesJSON string) (string, error) {
+// buildProjectContext reads all docs/ files and source code, parses
+// existing issues, and assembles them into a single YAML document for
+// prompt injection.
+func buildProjectContext(existingIssuesJSON string, goSourceDirs []string) (string, error) {
 	ctx := &ProjectContext{}
 
 	ctx.Vision = loadYAML[VisionDoc]("docs/VISION.yaml")
@@ -544,6 +588,7 @@ func buildProjectContext(existingIssuesJSON string) (string, error) {
 	}
 
 	ctx.Extra = loadExtraDocs("docs/")
+	ctx.SourceCode = loadSourceFiles(goSourceDirs)
 	ctx.Issues = parseIssuesJSON(existingIssuesJSON)
 
 	out, err := yaml.Marshal(ctx)
@@ -551,7 +596,7 @@ func buildProjectContext(existingIssuesJSON string) (string, error) {
 		logf("buildProjectContext: marshal error: %v", err)
 		return "", err
 	}
-	logf("buildProjectContext: %d bytes, vision=%v arch=%v roadmap=%v specs=%v eng=%d const=%v issues=%d extra=%d",
+	logf("buildProjectContext: %d bytes, vision=%v arch=%v roadmap=%v specs=%v eng=%d const=%v issues=%d extra=%d src=%d",
 		len(out),
 		ctx.Vision != nil,
 		ctx.Architecture != nil,
@@ -561,6 +606,7 @@ func buildProjectContext(existingIssuesJSON string) (string, error) {
 		ctx.Constitutions != nil,
 		len(ctx.Issues),
 		len(ctx.Extra),
+		len(ctx.SourceCode),
 	)
 	return string(out), nil
 }

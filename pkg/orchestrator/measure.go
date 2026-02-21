@@ -308,7 +308,7 @@ func (o *Orchestrator) buildMeasurePrompt(userInput, existingIssues string, limi
 		planningConst = planningConstitution
 	}
 
-	projectCtx, err := buildProjectContext(existingIssues)
+	projectCtx, err := buildProjectContext(existingIssues, o.cfg.Project.GoSourceDirs)
 	if err != nil {
 		logf("buildMeasurePrompt: buildProjectContext error: %v", err)
 		projectCtx = "# Error building project context\n"

@@ -159,6 +159,8 @@ func (pw *progressWriter) logLine(line []byte) {
 		}
 	case "user":
 		logf("[%s +%s] tools done, waiting for LLM", total, step)
+	case "rate_limit_event":
+		logf("[%s] rate_limit", total)
 	case "result":
 		logf("[%s] done: %d turn(s), tokens(in=%d out=%d)", total, pw.turn,
 			msg.Usage.InputTokens, msg.Usage.OutputTokens)

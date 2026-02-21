@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"text/template"
 	"time"
 
@@ -288,7 +287,6 @@ func countJSONArray(jsonStr string) int {
 // MeasurePromptData is the template data for the measure prompt.
 type MeasurePromptData struct {
 	ProjectContext       string
-	Stats                string // pre-computed repo stats (Go LOC, doc words)
 	Limit                int
 	OutputPath           string
 	UserInput            string
@@ -316,24 +314,8 @@ func (o *Orchestrator) buildMeasurePrompt(userInput, existingIssues string, limi
 		projectCtx = "# Error building project context\n"
 	}
 
-	// Pre-compute repo stats so Claude doesn't have to run mage stats.
-	statsStr := ""
-	if stats, err := o.CollectStats(); err == nil {
-		var parts []string
-		parts = append(parts, fmt.Sprintf("Go production LOC: %d", stats.GoProdLOC))
-		parts = append(parts, fmt.Sprintf("Go test LOC: %d", stats.GoTestLOC))
-		for label, words := range stats.SpecWords {
-			parts = append(parts, fmt.Sprintf("%s words: %d", label, words))
-		}
-		statsStr = strings.Join(parts, ", ")
-		logf("buildMeasurePrompt: stats=%s", statsStr)
-	} else {
-		logf("buildMeasurePrompt: stats collection failed: %v", err)
-	}
-
 	data := MeasurePromptData{
 		ProjectContext:       projectCtx,
-		Stats:                statsStr,
 		Limit:                limit,
 		OutputPath:           outputPath,
 		UserInput:            userInput,

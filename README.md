@@ -156,7 +156,7 @@ mage test:integration
 
 # Full E2E suite including Claude-gated tests (requires podman image and credentials)
 mage credentials        # extract Claude credentials from macOS Keychain
-mage test:generatorE2E  # sets E2E_CLAUDE=1 automatically
+mage test:generatorE2E  # runs full E2E suite including Claude
 
 # Scaffold a target repo for manual testing
 mage scaffold:push /path/to/target
@@ -167,7 +167,7 @@ mage lint
 mage install
 ```
 
-E2E tests download `github.com/petar-djukic/go-unix-utils`, scaffold it once in `TestMain`, and copy the snapshot per test. The scaffold round-trip test (`TestScaffold_PushPopRoundTrip`) creates an empty repository, scaffolds it, verifies all files, pops the scaffold, and verifies removal. Claude-gated tests skip unless `E2E_CLAUDE=1` is set.
+E2E tests download `github.com/petar-djukic/go-unix-utils`, scaffold it once in `TestMain`, and copy the snapshot per test. The scaffold round-trip test (`TestScaffold_PushPopRoundTrip`) creates an empty repository, scaffolds it, verifies all files, pops the scaffold, and verifies removal.
 
 ## License
 

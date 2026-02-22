@@ -7,9 +7,6 @@
 //   - bd (beads CLI) on PATH
 //   - go on PATH
 //   - The orchestrator source at the repo root (two levels up)
-//
-// Tests that also require Claude/podman are gated by the E2E_CLAUDE=1
-// environment variable. Without it they are skipped automatically.
 package e2e_test
 
 import (
@@ -167,13 +164,6 @@ func runMageOut(t *testing.T, dir string, target ...string) (string, error) {
 	return buf.String(), err
 }
 
-// requiresClaude skips the test unless E2E_CLAUDE is set to a non-empty value.
-func requiresClaude(t *testing.T) {
-	t.Helper()
-	if os.Getenv("E2E_CLAUDE") == "" {
-		t.Skip("set E2E_CLAUDE=1 to run Claude-requiring tests")
-	}
-}
 
 // fileExists returns true if the path relative to dir exists on disk.
 func fileExists(dir, rel string) bool {

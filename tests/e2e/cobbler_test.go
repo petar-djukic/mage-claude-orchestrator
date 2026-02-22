@@ -15,7 +15,6 @@ import (
 // TestCobbler_MeasureCreatesIssues verifies that mage cobbler:measure
 // produces at least one ready issue in beads.
 func TestCobbler_MeasureCreatesIssues(t *testing.T) {
-	requiresClaude(t)
 	dir := setupRepo(t)
 	setupClaude(t, dir)
 
@@ -44,9 +43,8 @@ func TestCobbler_MeasureCreatesIssues(t *testing.T) {
 // issue created by measure and executes it: the task is closed, code is
 // committed, and the task branch is cleaned up.
 //
-//	E2E_CLAUDE=1 go test -v -count=1 -timeout 900s -run TestCobbler_StitchExecutesTask ./tests/e2e/...
+//	go test -v -count=1 -timeout 900s -run TestCobbler_StitchExecutesTask ./tests/e2e/...
 func TestCobbler_StitchExecutesTask(t *testing.T) {
-	requiresClaude(t)
 	dir := setupRepo(t)
 	setupClaude(t, dir)
 
@@ -107,7 +105,6 @@ func TestCobbler_StitchExecutesTask(t *testing.T) {
 // TestCobbler_BeadsResetClearsAfterMeasure verifies that beads:reset clears
 // issues created by measure.
 func TestCobbler_BeadsResetClearsAfterMeasure(t *testing.T) {
-	requiresClaude(t)
 	dir := setupRepo(t)
 	setupClaude(t, dir)
 
@@ -136,7 +133,6 @@ func TestCobbler_BeadsResetClearsAfterMeasure(t *testing.T) {
 // TestGenerator_RunOneCycle verifies that a complete start/run/stop cycle
 // with cycles=1 returns to main with the expected tags.
 func TestGenerator_RunOneCycle(t *testing.T) {
-	requiresClaude(t)
 	dir := setupRepo(t)
 	setupClaude(t, dir)
 
@@ -175,7 +171,6 @@ func TestGenerator_RunOneCycle(t *testing.T) {
 // interrupted run (switch to main immediately after start, no prior work)
 // and completes cleanly.
 func TestGenerator_Resume(t *testing.T) {
-	requiresClaude(t)
 	dir := setupRepo(t)
 	setupClaude(t, dir)
 
@@ -242,9 +237,8 @@ func TestGenerator_Resume(t *testing.T) {
 // the wall-clock time and issue count for each. All five runs share a single
 // scaffolded repo (reset+init once) so the only variable is the limit.
 //
-//	E2E_CLAUDE=1 go test -v -count=1 -timeout 0 -run TestMeasure_TimingByLimit ./tests/e2e/...
+//	go test -v -count=1 -timeout 0 -run TestMeasure_TimingByLimit ./tests/e2e/...
 func TestMeasure_TimingByLimit(t *testing.T) {
-	requiresClaude(t)
 	dir := setupRepo(t)
 	setupClaude(t, dir)
 
@@ -285,9 +279,8 @@ func TestMeasure_TimingByLimit(t *testing.T) {
 // the wall-clock time for each step. Each cycle measures 1 issue then stitches
 // it, producing per-cycle timing data for both phases.
 //
-//	E2E_CLAUDE=1 go test -v -count=1 -timeout 0 -run TestStitch_TimingByCycle ./tests/e2e/...
+//	go test -v -count=1 -timeout 0 -run TestStitch_TimingByCycle ./tests/e2e/...
 func TestStitch_TimingByCycle(t *testing.T) {
-	requiresClaude(t)
 	dir := setupRepo(t)
 	setupClaude(t, dir)
 
@@ -379,9 +372,8 @@ func TestStitch_TimingByCycle(t *testing.T) {
 // This is a stress test. At ~3-4 min per Claude invocation it takes several
 // hours. Run it explicitly:
 //
-//	E2E_CLAUDE=1 go test -v -count=1 -timeout 0 -run TestGenerator_Stitch100 ./tests/e2e/...
+//	go test -v -count=1 -timeout 0 -run TestGenerator_Stitch100 ./tests/e2e/...
 func TestGenerator_Stitch100(t *testing.T) {
-	requiresClaude(t)
 	dir := setupRepo(t)
 	setupClaude(t, dir)
 

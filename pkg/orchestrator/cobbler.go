@@ -129,34 +129,42 @@ func (o *Orchestrator) saveHistoryStats(ts, phase string, stats HistoryStats) {
 	logf("saveHistoryStats: saved %s", path)
 }
 
-// saveHistoryPromptAndLog writes prompt and log files to the history directory.
-// The files are named {ts}-{phase}-prompt.yaml and {ts}-{phase}-log.log.
-func (o *Orchestrator) saveHistoryPromptAndLog(ts, phase, prompt string, rawOutput []byte) {
+// saveHistoryPrompt writes the prompt to the history directory.
+// Called BEFORE runClaude so the prompt is on disk even if Claude times out.
+func (o *Orchestrator) saveHistoryPrompt(ts, phase, prompt string) {
 	dir := o.cfg.Cobbler.HistoryDir
 	if dir == "" {
 		return
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		logf("saveHistoryPromptAndLog: mkdir %s: %v", dir, err)
+		logf("saveHistoryPrompt: mkdir %s: %v", dir, err)
 		return
 	}
-
-	base := ts + "-" + phase
-	saved := 0
-
-	if err := os.WriteFile(filepath.Join(dir, base+"-prompt.yaml"), []byte(prompt), 0o644); err != nil {
-		logf("saveHistoryPromptAndLog: write prompt: %v", err)
+	path := filepath.Join(dir, ts+"-"+phase+"-prompt.yaml")
+	if err := os.WriteFile(path, []byte(prompt), 0o644); err != nil {
+		logf("saveHistoryPrompt: write: %v", err)
 	} else {
-		saved++
+		logf("saveHistoryPrompt: saved %s", path)
 	}
+}
 
-	if err := os.WriteFile(filepath.Join(dir, base+"-log.log"), rawOutput, 0o644); err != nil {
-		logf("saveHistoryPromptAndLog: write log: %v", err)
+// saveHistoryLog writes the raw Claude output to the history directory.
+// Called AFTER runClaude completes.
+func (o *Orchestrator) saveHistoryLog(ts, phase string, rawOutput []byte) {
+	dir := o.cfg.Cobbler.HistoryDir
+	if dir == "" {
+		return
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		logf("saveHistoryLog: mkdir %s: %v", dir, err)
+		return
+	}
+	path := filepath.Join(dir, ts+"-"+phase+"-log.log")
+	if err := os.WriteFile(path, rawOutput, 0o644); err != nil {
+		logf("saveHistoryLog: write: %v", err)
 	} else {
-		saved++
+		logf("saveHistoryLog: saved %s", path)
 	}
-
-	logf("saveHistoryPromptAndLog: saved %d file(s) to %s/%s-*", saved, dir, base)
 }
 
 // recordInvocation serializes an InvocationRecord to JSON and adds it

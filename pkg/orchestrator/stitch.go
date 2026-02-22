@@ -318,6 +318,10 @@ func (o *Orchestrator) doOneTask(task stitchTask, baseBranch, repoRoot string) e
 	}
 	logf("doOneTask: prompt built, length=%d bytes", len(prompt))
 
+	// Save prompt BEFORE calling Claude so it's on disk even if Claude times out.
+	historyTS := time.Now().Format("2006-01-02-15-04-05")
+	o.saveHistoryPrompt(historyTS, "stitch", prompt)
+
 	logf("doOneTask: invoking Claude for task %s", task.id)
 	claudeStart := time.Now()
 	tokens, err := o.runClaude(prompt, task.worktreeDir, o.cfg.Silence())
@@ -359,10 +363,9 @@ func (o *Orchestrator) doOneTask(task stitchTask, baseBranch, repoRoot string) e
 	logf("doOneTask: cleaning up worktree for %s", task.id)
 	cleanupWorktree(task)
 
-	// Save stitch history (prompt, log, stats).
+	// Save remaining stitch history (log, stats).
 	taskDuration := time.Since(taskStart)
-	historyTS := time.Now().Format("2006-01-02-15-04-05")
-	o.saveHistoryPromptAndLog(historyTS, "stitch", prompt, tokens.RawOutput)
+	o.saveHistoryLog(historyTS, "stitch", tokens.RawOutput)
 	o.saveHistoryStats(historyTS, "stitch", HistoryStats{
 		Caller:    "stitch",
 		TaskID:    task.id,

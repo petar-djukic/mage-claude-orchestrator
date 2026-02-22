@@ -131,6 +131,10 @@ func (o *Orchestrator) RunMeasure() error {
 		}
 		logf("iteration %d prompt built, length=%d bytes", i+1, len(prompt))
 
+		// Save prompt BEFORE calling Claude so it's on disk even if Claude times out.
+		historyTS := time.Now().Format("2006-01-02-15-04-05")
+		o.saveHistoryPrompt(historyTS, "measure", prompt)
+
 		iterStart := time.Now()
 		tokens, err := o.runClaude(prompt, "", o.cfg.Silence())
 		iterDuration := time.Since(iterStart)
@@ -150,9 +154,8 @@ func (o *Orchestrator) RunMeasure() error {
 		}
 		logf("iteration %d Claude completed in %s", i+1, iterDuration.Round(time.Second))
 
-		// Save history artifacts (prompt, log, issues, stats) before importing.
-		historyTS := time.Now().Format("2006-01-02-15-04-05")
-		o.saveHistory(historyTS, prompt, tokens.RawOutput, outputFile)
+		// Save remaining history artifacts (log, issues, stats) after Claude.
+		o.saveHistory(historyTS, tokens.RawOutput, outputFile)
 		o.saveHistoryStats(historyTS, "measure", HistoryStats{
 			Caller:    "measure",
 			StartedAt: iterStart.UTC().Format(time.RFC3339),
@@ -455,11 +458,10 @@ func (o *Orchestrator) importIssues(yamlFile string) ([]string, error) {
 	return ids, nil
 }
 
-// saveHistory persists measure artifacts (prompt, issues YAML, stream-json log)
-// to the configured history directory. Each iteration produces three files named
-// YYYY-MM-DD-HH-MM-SS-measure-{prompt,issues,log}.{yaml,log}.
-func (o *Orchestrator) saveHistory(ts, prompt string, rawOutput []byte, issuesFile string) {
-	o.saveHistoryPromptAndLog(ts, "measure", prompt, rawOutput)
+// saveHistory persists measure artifacts (log, issues YAML) to the configured
+// history directory. The prompt is saved separately before runClaude.
+func (o *Orchestrator) saveHistory(ts string, rawOutput []byte, issuesFile string) {
+	o.saveHistoryLog(ts, "measure", rawOutput)
 
 	dir := o.cfg.Cobbler.HistoryDir
 	if dir == "" {

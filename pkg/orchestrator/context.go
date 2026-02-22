@@ -5,6 +5,7 @@ package orchestrator
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -32,11 +33,11 @@ type ProjectContext struct {
 	Extra          []*NamedDoc        `yaml:"extra,omitempty"`
 }
 
-// SourceFile holds the path and content of a single source file
-// for inclusion in the project context.
+// SourceFile holds a source file for inclusion in the project context.
+// Lines are formatted as "{number} | {content}", with blank lines omitted.
 type SourceFile struct {
-	Path    string `yaml:"path"`
-	Content string `yaml:"content"`
+	File  string   `yaml:"file"`
+	Lines []string `yaml:"lines"`
 }
 
 // ---------------------------------------------------------------------------
@@ -529,6 +530,24 @@ func parseIssuesJSON(jsonStr string) []ContextIssue {
 	return issues
 }
 
+// numberLines formats source file content as a list of "{number} | {line}"
+// strings. Blank lines are omitted; gaps in numbering indicate their
+// positions. This keeps the YAML compact while preserving line references.
+func numberLines(content string) []string {
+	lines := strings.Split(content, "\n")
+	var result []string
+	for i, line := range lines {
+		if i == len(lines)-1 && line == "" {
+			break // trailing newline from Split
+		}
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		result = append(result, fmt.Sprintf("%d | %s", i+1, line))
+	}
+	return result
+}
+
 // loadSourceFiles walks the given directories and reads all .go files,
 // returning them sorted by path for deterministic prompt output.
 func loadSourceFiles(dirs []string) []SourceFile {
@@ -550,8 +569,8 @@ func loadSourceFiles(dirs []string) []SourceFile {
 				return nil
 			}
 			files = append(files, SourceFile{
-				Path:    path,
-				Content: string(data),
+				File:  path,
+				Lines: numberLines(string(data)),
 			})
 			return nil
 		})
@@ -559,7 +578,7 @@ func loadSourceFiles(dirs []string) []SourceFile {
 			logf("loadSourceFiles: walk error for %s: %v", dir, err)
 		}
 	}
-	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
+	sort.Slice(files, func(i, j int) bool { return files[i].File < files[j].File })
 	logf("loadSourceFiles: %d file(s) from %d dir(s)", len(files), len(dirs))
 	return files
 }

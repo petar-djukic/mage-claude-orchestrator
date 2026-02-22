@@ -1,4 +1,4 @@
-module github.com/mesh-intelligence/mage-claude-orchestrator
+module github.com/mesh-intelligence/cobbler-scaffold
 
 go 1.25.7
 

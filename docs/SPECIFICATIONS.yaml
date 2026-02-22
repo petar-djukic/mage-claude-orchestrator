@@ -1,8 +1,8 @@
 # Copyright (c) 2026 Petar Djukic. All rights reserved.
 # SPDX-License-Identifier: MIT
 
-id: specifications-mage-claude-orchestrator
-title: Mage Claude Orchestrator Specifications
+id: specifications-cobbler-scaffold
+title: Cobbler Scaffold Specifications
 
 overview: |
   We build a Go library that automates AI-driven code generation through a

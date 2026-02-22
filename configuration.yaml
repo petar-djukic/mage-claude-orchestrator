@@ -1,7 +1,7 @@
 # Orchestrator configuration for this repository.
 # This repo is a library — no binary or main package.
 
-module_path: github.com/mesh-intelligence/mage-claude-orchestrator
+module_path: github.com/mesh-intelligence/cobbler-scaffold
 binary_name: ""
 binary_dir: bin
 main_package: ""

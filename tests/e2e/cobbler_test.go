@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mesh-intelligence/mage-claude-orchestrator/pkg/orchestrator"
+	"github.com/mesh-intelligence/cobbler-scaffold/pkg/orchestrator"
 )
 
 // TestCobbler_MeasureCreatesIssues verifies that mage cobbler:measure

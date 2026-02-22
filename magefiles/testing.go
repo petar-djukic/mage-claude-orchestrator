@@ -10,7 +10,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/mesh-intelligence/mage-claude-orchestrator/pkg/orchestrator"
+	"github.com/mesh-intelligence/cobbler-scaffold/pkg/orchestrator"
 )
 
 // --- Test targets (integration) ---

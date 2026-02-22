@@ -24,9 +24,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mesh-intelligence/mage-claude-orchestrator/pkg/orchestrator"
+	"github.com/mesh-intelligence/cobbler-scaffold/pkg/orchestrator"
 	"gopkg.in/yaml.v3"
 )
+
+// scaffoldModule is the Go module used as the E2E test target.
+const scaffoldModule = "github.com/petar-djukic/go-unix-utils"
 
 // orchRoot is the absolute path to the orchestrator repository root.
 var orchRoot string
@@ -65,9 +68,15 @@ func prepareSnapshot() (string, func(), error) {
 	}
 	orch := orchestrator.New(cfg)
 
+	version, err := latestModuleVersion(scaffoldModule)
+	if err != nil {
+		return "", nil, fmt.Errorf("resolving latest version of %s: %w", scaffoldModule, err)
+	}
+	fmt.Fprintf(os.Stderr, "e2e: using %s@%s\n", scaffoldModule, version)
+
 	repoDir, err := orch.PrepareTestRepo(
-		"github.com/petar-djukic/go-unix-utils",
-		"v0.20260220.2",
+		scaffoldModule,
+		version,
 		orchRoot,
 	)
 	if err != nil {
@@ -248,7 +257,7 @@ func countReadyIssues(t *testing.T, dir string) int {
 }
 
 // claudeImage is the container image used for Claude in E2E tests.
-const claudeImage = "localhost/mage-claude-orchestrator:latest"
+const claudeImage = "localhost/cobbler-scaffold:latest"
 
 // setupClaude extracts Claude credentials into the test repo and configures
 // the podman image in configuration.yaml. Call this at the start of every
@@ -285,6 +294,21 @@ func writeConfigOverride(t *testing.T, dir string, modify func(*orchestrator.Con
 	if err := os.WriteFile(cfgPath, newData, 0o644); err != nil {
 		t.Fatalf("writeConfigOverride: write: %v", err)
 	}
+}
+
+// latestModuleVersion resolves the latest tagged version of a Go module
+// using `go list -m -versions`. Returns the last (highest) version.
+func latestModuleVersion(module string) (string, error) {
+	out, err := exec.Command("go", "list", "-m", "-versions", module).Output()
+	if err != nil {
+		return "", fmt.Errorf("go list -m -versions %s: %w", module, err)
+	}
+	// Output format: "module v0.1.0 v0.2.0 v0.3.0"
+	parts := strings.Fields(strings.TrimSpace(string(out)))
+	if len(parts) < 2 {
+		return "", fmt.Errorf("no versions found for %s", module)
+	}
+	return parts[len(parts)-1], nil
 }
 
 // copyDirSkipGit copies src to dst recursively, skipping the .git directory.

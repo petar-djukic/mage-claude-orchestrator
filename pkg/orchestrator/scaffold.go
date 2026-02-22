@@ -21,7 +21,7 @@ import (
 var designConstitution string
 
 // orchestratorModule is the Go module path for this orchestrator library.
-const orchestratorModule = "github.com/mesh-intelligence/mage-claude-orchestrator"
+const orchestratorModule = "github.com/mesh-intelligence/cobbler-scaffold"
 
 // Scaffold sets up a target Go repository to use the orchestrator.
 // It copies the orchestrator.go template into magefiles/, detects
@@ -340,8 +340,9 @@ func writeScaffoldConfig(path string, cfg Config) error {
 }
 
 // scaffoldMageGoMod ensures magefiles/go.mod exists with the orchestrator
-// dependency and replace directive pointing to the local checkout.
-// If magefiles/go.mod does not exist, it creates one.
+// dependency. If a published version of the orchestrator module is available
+// on the Go module proxy, it is required directly. Otherwise the function
+// falls back to a local replace directive pointing at orchestratorRoot.
 func scaffoldMageGoMod(mageDir, rootModule, orchestratorRoot string) error {
 	goMod := filepath.Join(mageDir, "go.mod")
 
@@ -356,24 +357,87 @@ func scaffoldMageGoMod(mageDir, rootModule, orchestratorRoot string) error {
 		}
 	}
 
-	// Add replace directive.
-	replaceCmd := exec.Command(binGo, "mod", "edit",
-		"-replace", orchestratorModule+"="+orchestratorRoot)
-	replaceCmd.Dir = mageDir
-	if err := replaceCmd.Run(); err != nil {
-		return fmt.Errorf("go mod edit -replace: %w", err)
+	// Prefer a published version over a local replace directive.
+	// A local replace bakes a machine-specific absolute path into the
+	// target repo, which is meaningless to other machines and fails
+	// inside containers.
+	usedPublished := false
+	if version := latestPublishedVersion(orchestratorModule); version != "" {
+		logf("scaffold: trying published %s@%s", orchestratorModule, version)
+
+		// Drop any stale replace directive from a previous scaffold.
+		dropCmd := exec.Command(binGo, "mod", "edit",
+			"-dropreplace", orchestratorModule)
+		dropCmd.Dir = mageDir
+		_ = dropCmd.Run() // ignore error if no replace exists
+
+		requireCmd := exec.Command(binGo, "mod", "edit",
+			"-require", orchestratorModule+"@"+version)
+		requireCmd.Dir = mageDir
+		if err := requireCmd.Run(); err != nil {
+			return fmt.Errorf("go mod edit -require: %w", err)
+		}
+
+		// Verify the published version is usable (module path may have
+		// changed across tags — the proxy will reject mismatches).
+		tidyCmd := exec.Command(binGo, "mod", "tidy")
+		tidyCmd.Dir = mageDir
+		if err := tidyCmd.Run(); err != nil {
+			logf("scaffold: published %s@%s unusable (%v); falling back to local replace", orchestratorModule, version, err)
+		} else {
+			usedPublished = true
+		}
 	}
 
-	// Tidy resolves imports from orchestrator.go and adds required modules.
-	tidyCmd := exec.Command(binGo, "mod", "tidy")
-	tidyCmd.Dir = mageDir
-	tidyCmd.Stdout = os.Stdout
-	tidyCmd.Stderr = os.Stderr
-	if err := tidyCmd.Run(); err != nil {
-		return fmt.Errorf("go mod tidy: %w", err)
+	if !usedPublished {
+		logf("scaffold: using local replace for %s", orchestratorModule)
+		replaceCmd := exec.Command(binGo, "mod", "edit",
+			"-replace", orchestratorModule+"="+orchestratorRoot)
+		replaceCmd.Dir = mageDir
+		if err := replaceCmd.Run(); err != nil {
+			return fmt.Errorf("go mod edit -replace: %w", err)
+		}
+
+		tidyCmd := exec.Command(binGo, "mod", "tidy")
+		tidyCmd.Dir = mageDir
+		tidyCmd.Stdout = os.Stdout
+		tidyCmd.Stderr = os.Stderr
+		if err := tidyCmd.Run(); err != nil {
+			return fmt.Errorf("go mod tidy: %w", err)
+		}
 	}
 
 	return nil
+}
+
+// latestPublishedVersion queries the Go module proxy for the latest
+// published version of module. Returns empty string if no versions
+// are available or the proxy cannot be reached.
+func latestPublishedVersion(module string) string {
+	tmpDir, err := os.MkdirTemp("", "version-check-*")
+	if err != nil {
+		return ""
+	}
+	defer os.RemoveAll(tmpDir)
+
+	initCmd := exec.Command(binGo, "mod", "init", "temp")
+	initCmd.Dir = tmpDir
+	if err := initCmd.Run(); err != nil {
+		return ""
+	}
+
+	cmd := exec.Command(binGo, "list", "-m", "-versions", module)
+	cmd.Dir = tmpDir
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	// Output format: "module v0.1.0 v0.2.0 v0.3.0"
+	parts := strings.Fields(strings.TrimSpace(string(out)))
+	if len(parts) < 2 {
+		return ""
+	}
+	return parts[len(parts)-1]
 }
 
 // verifyMage runs mage -l in the target directory to confirm the

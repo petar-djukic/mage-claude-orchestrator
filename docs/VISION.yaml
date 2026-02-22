@@ -1,5 +1,5 @@
-id: vision-mage-claude-orchestrator
-title: Mage Claude Orchestrator Vision
+id: vision-cobbler-scaffold
+title: Cobbler Scaffold Vision
 
 executive_summary: |
   Mage Claude Orchestrator is a Go library that automates multi-step AI-driven code generation

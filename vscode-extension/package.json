@@ -1,7 +1,7 @@
 {
   "name": "mage-orchestrator",
   "displayName": "Mage Orchestrator Dashboard",
-  "description": "Status dashboard for mage-claude-orchestrator generation cycles",
+  "description": "Status dashboard for cobbler-scaffold generation cycles",
   "version": "0.0.1",
   "publisher": "mesh-intelligence",
   "license": "MIT",

@@ -89,8 +89,8 @@ func podmanImageExists(image string) bool {
 }
 
 // imageBaseName extracts the image name without a tag from a full image
-// reference. For example, "mage-claude-orchestrator:latest" returns
-// "mage-claude-orchestrator". If no tag is present, the input is returned
+// reference. For example, "cobbler-scaffold:latest" returns
+// "cobbler-scaffold". If no tag is present, the input is returned
 // as-is.
 func imageBaseName(image string) string {
 	if i := strings.LastIndex(image, ":"); i > 0 {

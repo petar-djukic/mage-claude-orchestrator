@@ -1,5 +1,5 @@
-id: mage-claude-orchestrator-roadmap
-title: Mage Claude Orchestrator Roadmap
+id: cobbler-scaffold-roadmap
+title: Cobbler Scaffold Roadmap
 
 releases:
   - version: "01.0"

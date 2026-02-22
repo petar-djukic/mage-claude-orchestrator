@@ -86,10 +86,10 @@ func Tag() error { return newOrch().Tag() }
 
 // --- Scaffold targets ---
 
-// Pop removes orchestrator-managed files from the repository:
+// Pop removes orchestrator-managed files from the target repository:
 // magefiles/orchestrator.go, docs/constitutions/, docs/prompts/, and
-// configuration.yaml.
-func (Scaffold) Pop() error { return newOrch().Uninstall(".") }
+// configuration.yaml. Pass "." for the current directory.
+func (Scaffold) Pop(target string) error { return newOrch().Uninstall(target) }
 
 // --- Test targets ---
 

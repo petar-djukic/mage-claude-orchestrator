@@ -4,6 +4,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -31,6 +32,12 @@ type Test mg.Namespace
 var baseCfg orchestrator.Config
 
 func init() {
+	if _, err := os.Stat(orchestrator.DefaultConfigFile); errors.Is(err, os.ErrNotExist) {
+		if err := orchestrator.WriteDefaultConfig(orchestrator.DefaultConfigFile); err != nil {
+			panic(fmt.Sprintf("creating %s: %v", orchestrator.DefaultConfigFile, err))
+		}
+		fmt.Fprintf(os.Stderr, "created default %s\n", orchestrator.DefaultConfigFile)
+	}
 	var err error
 	baseCfg, err = orchestrator.LoadConfig(orchestrator.DefaultConfigFile)
 	if err != nil {

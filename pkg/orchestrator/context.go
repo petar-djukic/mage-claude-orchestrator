@@ -36,8 +36,8 @@ type ProjectContext struct {
 // SourceFile holds a source file for inclusion in the project context.
 // Lines are formatted as "{number} | {content}", with blank lines omitted.
 type SourceFile struct {
-	File  string   `yaml:"file"`
-	Lines []string `yaml:"lines"`
+	File  string `yaml:"file"`
+	Lines string `yaml:"lines"`
 }
 
 // ---------------------------------------------------------------------------
@@ -530,10 +530,11 @@ func parseIssuesJSON(jsonStr string) []ContextIssue {
 	return issues
 }
 
-// numberLines formats source file content as a list of "{number} | {line}"
-// strings. Blank lines are omitted; gaps in numbering indicate their
-// positions. This keeps the YAML compact while preserving line references.
-func numberLines(content string) []string {
+// numberLines formats source file content as a single string of
+// "{number} | {line}" entries joined by newlines. Blank lines are omitted;
+// gaps in numbering indicate their positions. yaml.v3 renders the result
+// as a block scalar, saving tokens compared to a YAML list.
+func numberLines(content string) string {
 	lines := strings.Split(content, "\n")
 	var result []string
 	for i, line := range lines {
@@ -545,7 +546,7 @@ func numberLines(content string) []string {
 		}
 		result = append(result, fmt.Sprintf("%d | %s", i+1, line))
 	}
-	return result
+	return strings.Join(result, "\n")
 }
 
 // loadSourceFiles walks the given directories and reads all .go files,

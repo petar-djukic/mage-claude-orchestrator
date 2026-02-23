@@ -84,7 +84,7 @@ func (o *Orchestrator) PodmanClean() error {
 
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 	if len(lines) == 0 || lines[0] == "" {
-		logf("podmanClean: no containers found for image %s (%s)", image, imageID[:12])
+		logf("podmanClean: no containers found for image %s (%s)", image, shortID(imageID))
 		return nil
 	}
 
@@ -95,7 +95,7 @@ func (o *Orchestrator) PodmanClean() error {
 		}
 	}
 
-	logf("podmanClean: removing %d container(s) for image %s (%s)", len(ids), image, imageID[:12])
+	logf("podmanClean: removing %d container(s) for image %s (%s)", len(ids), image, shortID(imageID))
 	args := append([]string{"rm", "-f"}, ids...)
 	cmd := exec.Command(binPodman, args...)
 	cmd.Stdout = os.Stdout
@@ -161,6 +161,15 @@ func podmanImageID(image string) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+// shortID returns the first 12 characters of an image ID for display,
+// or the full string if it is shorter than 12 characters.
+func shortID(id string) string {
+	if len(id) > 12 {
+		return id[:12]
+	}
+	return id
 }
 
 // imageBaseName extracts the image name without a tag from a full image

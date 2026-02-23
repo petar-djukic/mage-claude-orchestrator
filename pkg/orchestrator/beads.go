@@ -6,6 +6,7 @@ package orchestrator
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 )
 
 // BeadsInit initializes the beads database using the current branch as prefix.
@@ -107,7 +108,7 @@ func (o *Orchestrator) beadsResetDB() error {
 		return fmt.Errorf("recreating %s: %w", o.cfg.Cobbler.BeadsDir, err)
 	}
 	for _, name := range []string{"issues.jsonl", "interactions.jsonl"} {
-		if err := os.WriteFile(o.cfg.Cobbler.BeadsDir+name, nil, 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(o.cfg.Cobbler.BeadsDir, name), nil, 0o644); err != nil {
 			logf("beadsResetDB: WriteFile %s warning: %v", name, err)
 		}
 	}

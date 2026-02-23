@@ -288,6 +288,9 @@ func detectModulePath(targetDir string) (string, error) {
 			return strings.TrimSpace(strings.TrimPrefix(line, "module")), nil
 		}
 	}
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("reading go.mod: %w", err)
+	}
 	return "", fmt.Errorf("no module directive in %s", modPath)
 }
 

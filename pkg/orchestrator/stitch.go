@@ -6,6 +6,7 @@ package orchestrator
 import (
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -15,6 +16,11 @@ import (
 
 	"gopkg.in/yaml.v3"
 )
+
+// errTaskReset is returned by doOneTask when a task fails but the stitch
+// loop should continue to the next task (e.g., Claude failure, worktree
+// commit failure, merge failure). The task has been reset to "ready".
+var errTaskReset = errors.New("task reset to ready")
 
 //go:embed prompts/stitch.yaml
 var defaultStitchPrompt string
@@ -111,6 +117,10 @@ func (o *Orchestrator) RunStitchN(limit int) (int, error) {
 		taskStart := time.Now()
 		logf("executing task %d: id=%s title=%q", totalTasks+1, task.id, task.title)
 		if err := o.doOneTask(task, baseBranch, repoRoot); err != nil {
+			if errors.Is(err, errTaskReset) {
+				logf("task %s was reset after %s, continuing", task.id, time.Since(taskStart).Round(time.Second))
+				continue
+			}
 			logf("task %s failed after %s: %v", task.id, time.Since(taskStart).Round(time.Second), err)
 			return totalTasks, fmt.Errorf("executing task %s: %w", task.id, err)
 		}
@@ -330,7 +340,7 @@ func (o *Orchestrator) doOneTask(task stitchTask, baseBranch, repoRoot string) e
 	if err != nil {
 		logf("doOneTask: Claude failed for %s after %s: %v", task.id, time.Since(claudeStart).Round(time.Second), err)
 		o.resetTask(task, "Claude failure")
-		return nil
+		return errTaskReset
 	}
 	logf("doOneTask: Claude completed for %s in %s", task.id, time.Since(claudeStart).Round(time.Second))
 
@@ -339,7 +349,7 @@ func (o *Orchestrator) doOneTask(task stitchTask, baseBranch, repoRoot string) e
 	if err := commitWorktreeChanges(task); err != nil {
 		logf("doOneTask: worktree commit failed for %s: %v", task.id, err)
 		o.resetTask(task, "worktree commit failure")
-		return nil
+		return errTaskReset
 	}
 
 	// Capture pre-merge HEAD for diffstat.
@@ -351,7 +361,7 @@ func (o *Orchestrator) doOneTask(task stitchTask, baseBranch, repoRoot string) e
 	if err := mergeBranch(task.branchName, baseBranch, repoRoot); err != nil {
 		logf("doOneTask: merge failed for %s after %s: %v", task.id, time.Since(mergeStart).Round(time.Second), err)
 		o.resetTask(task, "merge failure")
-		return nil
+		return errTaskReset
 	}
 	logf("doOneTask: merge completed in %s", time.Since(mergeStart).Round(time.Second))
 
@@ -445,18 +455,17 @@ func (o *Orchestrator) buildStitchPrompt(task stitchTask) (string, error) {
 	if task.worktreeDir != "" {
 		orig, err := os.Getwd()
 		if err != nil {
-			logf("buildStitchPrompt: getwd error: %v", err)
+			return "", fmt.Errorf("buildStitchPrompt: getwd: %w", err)
+		}
+		if err := os.Chdir(task.worktreeDir); err != nil {
+			logf("buildStitchPrompt: chdir to worktree error: %v", err)
 		} else {
-			if err := os.Chdir(task.worktreeDir); err != nil {
-				logf("buildStitchPrompt: chdir to worktree error: %v", err)
+			defer os.Chdir(orig)
+			ctx, ctxErr := buildProjectContext("", o.cfg.Project.GoSourceDirs, o.cfg.Project.ContextSources)
+			if ctxErr != nil {
+				logf("buildStitchPrompt: buildProjectContext error: %v", ctxErr)
 			} else {
-				ctx, ctxErr := buildProjectContext("", o.cfg.Project.GoSourceDirs, o.cfg.Project.ContextSources)
-				if ctxErr != nil {
-					logf("buildStitchPrompt: buildProjectContext error: %v", ctxErr)
-				} else {
-					projectCtx = ctx
-				}
-				os.Chdir(orig) // nolint: restore original directory
+				projectCtx = ctx
 			}
 		}
 	}

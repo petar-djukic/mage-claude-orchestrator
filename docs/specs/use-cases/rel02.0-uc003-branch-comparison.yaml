@@ -1,0 +1,61 @@
+# Copyright (c) 2026 Petar Djukic. All rights reserved.
+# SPDX-License-Identifier: MIT
+
+id: rel02.0-uc003-branch-comparison
+title: Branch and Tag Comparison
+
+summary: |
+  A developer selects two version tags from a quick-pick list and sees a
+  file-level summary of changes between them. Each changed file is clickable
+  to open a VS Code diff editor. The developer can also compare two generation
+  branches by selecting generations from the Generation Browser tree view.
+
+actor: Developer using VS Code with the orchestrator extension installed
+
+trigger: Developer invokes the Compare Tags command from the Command Palette, or selects two generations in the Generation Browser for comparison
+
+flow:
+  - F1: "Invoke comparison command: developer opens the Command Palette and selects Mage Orchestrator Compare Tags"
+  - F2: "Select first tag: extension presents a quick-pick list of all version tags matching v[REL].[DATE].[REVISION] and the developer selects one"
+  - F3: "Select second tag: extension presents the same list (minus the first selection) and the developer selects the second tag"
+  - F4: "Compute diff: extension runs git diff --name-status between the two selected refs"
+  - F5: "Display file summary: extension opens a TreeDataProvider view showing added, modified, and deleted files grouped by directory"
+  - F6: "Open diff editor: developer clicks a file node and VS Code opens a diff editor showing the file-level changes between the two refs"
+  - F7: "Generation branch comparison: developer selects two generation nodes in the Generation Browser tree and invokes the compare context menu action"
+  - F8: "Resolve branch refs: extension resolves each generation to its branch ref and repeats F4 through F6"
+
+touchpoints:
+  - T1: "Compare Tags command registration: prd006-vscode-extension R3.1"
+  - T2: "Quick-pick tag selection: prd006-vscode-extension R3.2"
+  - T3: "File-level diff summary: prd006-vscode-extension R3.3"
+  - T4: "Click-to-diff editor: prd006-vscode-extension R3.4"
+  - T5: "Generation branch comparison: prd006-vscode-extension R3.5"
+  - T6: "TreeDataProvider for changed files: prd006-vscode-extension R3.6"
+  - T7: "Generation Browser context menu: prd006-vscode-extension R2.8"
+  - T8: "Tag naming convention: prd002-generation-lifecycle R1.2"
+  - T9: "Version tag format: prd002-generation-lifecycle R5.6"
+
+success_criteria:
+  - S1: Quick-pick list displays all version tags matching the v[REL].[DATE].[REVISION] pattern
+  - S2: File summary tree shows added, modified, and deleted files grouped by directory after selecting two tags
+  - S3: Clicking a file in the summary opens a VS Code diff editor showing changes between the two refs
+  - S4: Generation-to-generation comparison resolves each generation to its branch ref and displays the same file summary
+  - S5: Comparison works when one or both refs have been merged or abandoned (uses tag refs, not branches)
+  - S6: Empty diff (identical refs) displays an informational message instead of an empty tree
+
+out_of_scope:
+  - Line-level inline annotations or blame views
+  - Three-way merge comparisons
+  - Comparison against uncommitted working tree changes
+  - Exporting or saving comparison results
+
+dependencies:
+  - D1: prd006-vscode-extension R3 (Branch and Tag Comparison requirements)
+  - D2: prd002-generation-lifecycle R1 (tag naming conventions for generation identification)
+  - D3: prd006-vscode-extension R2.8 (Generation Browser context menu action for selecting generations)
+  - D4: Extension infrastructure (prd006 R7) must be in place for commands and tree views to register
+
+risks:
+  - K1: "Large diffs between distant tags may produce slow or overwhelming file lists | Paginate or cap the file list and show a count summary"
+  - K2: "Deleted generation branches leave only tags | Use tag refs for comparison so deleted branches do not break the workflow"
+  - K3: "No version tags exist in a fresh repository | Show an informational message when the quick-pick list is empty"

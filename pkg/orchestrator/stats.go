@@ -59,12 +59,15 @@ func (o *Orchestrator) CollectStats() (StatsRecord, error) {
 	}
 
 	specWords := make(map[string]int)
-	for label, pattern := range o.cfg.Project.SpecGlobs {
-		words, wordErr := countWordsInGlob(pattern)
-		if wordErr != nil {
-			return StatsRecord{}, wordErr
+	for _, path := range resolveContextSources(o.cfg.Project.ContextSources) {
+		cat := classifyContextFile(path)
+		if cat == "prd" || cat == "use_case" || cat == "test_suite" {
+			words, wordErr := countWordsInFile(path)
+			if wordErr != nil {
+				continue
+			}
+			specWords[cat] += words
 		}
-		specWords[label] = words
 	}
 
 	return StatsRecord{
@@ -102,22 +105,6 @@ func countLines(path string) (int, error) {
 		count++
 	}
 	return count, scanner.Err()
-}
-
-func countWordsInGlob(pattern string) (int, error) {
-	matches, err := filepath.Glob(pattern)
-	if err != nil {
-		return 0, err
-	}
-	total := 0
-	for _, path := range matches {
-		words, wordErr := countWordsInFile(path)
-		if wordErr != nil {
-			continue
-		}
-		total += words
-	}
-	return total, nil
 }
 
 func countWordsInFile(path string) (int, error) {

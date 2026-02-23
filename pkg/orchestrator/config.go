@@ -36,9 +36,6 @@ type ProjectConfig struct {
 	// (default "magefiles").
 	MagefilesDir string `yaml:"magefiles_dir"`
 
-	// SpecGlobs maps a label to a glob pattern for word-count stats.
-	SpecGlobs map[string]string `yaml:"spec_globs"`
-
 	// ContextSources is a newline-delimited list of file paths and glob
 	// patterns that feed into the measure prompt's project context. Each
 	// line is a path or glob (e.g., "docs/VISION.yaml", "docs/specs/*.yaml").

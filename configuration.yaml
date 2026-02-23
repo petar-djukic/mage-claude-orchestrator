@@ -12,10 +12,6 @@ project:
         - tests/
     version_file: ""
     magefiles_dir: magefiles
-    spec_globs:
-        prd: "docs/specs/product-requirements/*.yaml"
-        use_case: "docs/specs/use-cases/*.yaml"
-        test_suite: "docs/specs/test-suites/*.yaml"
     context_sources: |
         docs/VISION.yaml
         docs/ARCHITECTURE.yaml

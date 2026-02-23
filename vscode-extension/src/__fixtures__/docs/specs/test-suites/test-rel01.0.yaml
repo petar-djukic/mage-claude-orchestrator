@@ -1,0 +1,6 @@
+id: test-rel01.0
+title: Release 01.0 Test Suite
+release: rel01.0
+traces:
+  - rel01.0-uc001-basic
+  - rel01.0-uc002-multi-touchpoint

@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!-- Background circle -->
+  <circle cx="64" cy="64" r="60" fill="#2d2017"/>
+
+  <!-- Boot body - worn work boot silhouette -->
+  <g transform="translate(20, 18) scale(0.68)">
+    <!-- Boot shaft (upper) -->
+    <path d="M42 20 L42 65 L38 68 L35 72 L15 80 L10 85 L10 100 L115 100 L115 85 L108 70 L95 65 L85 60 L82 20 Z"
+          fill="#8B6914" stroke="#5C4010" stroke-width="2"/>
+
+    <!-- Boot sole - thick worn sole -->
+    <path d="M8 95 L8 110 Q8 115 13 115 L112 115 Q117 115 117 110 L117 95 L115 100 L10 100 Z"
+          fill="#3B2508" stroke="#2A1A06" stroke-width="1.5"/>
+
+    <!-- Heel -->
+    <path d="M85 110 L85 120 Q85 125 90 125 L112 125 Q117 125 117 120 L117 110 Z"
+          fill="#3B2508" stroke="#2A1A06" stroke-width="1.5"/>
+
+    <!-- Boot opening / collar -->
+    <ellipse cx="62" cy="20" rx="22" ry="6" fill="#6B4F10" stroke="#5C4010" stroke-width="1.5"/>
+
+    <!-- Stitching line along shaft -->
+    <path d="M48 28 L48 65" stroke="#A08030" stroke-width="1" stroke-dasharray="3,3"/>
+    <path d="M76 28 L76 62" stroke="#A08030" stroke-width="1" stroke-dasharray="3,3"/>
+
+    <!-- Toe cap stitching -->
+    <path d="M15 82 Q40 72 60 78" stroke="#A08030" stroke-width="1" stroke-dasharray="3,3" fill="none"/>
+
+    <!-- Welt stitching along sole -->
+    <path d="M12 97 L112 97" stroke="#A08030" stroke-width="0.8" stroke-dasharray="2,2"/>
+
+    <!-- Worn patches / scuffs on toe -->
+    <ellipse cx="28" cy="88" rx="10" ry="5" fill="#9B7520" opacity="0.5"/>
+    <ellipse cx="50" cy="92" rx="7" ry="3" fill="#7A5A12" opacity="0.4"/>
+
+    <!-- Scratch marks for worn look -->
+    <line x1="20" y1="85" x2="32" y2="83" stroke="#A08030" stroke-width="0.7" opacity="0.6"/>
+    <line x1="25" y1="90" x2="38" y2="87" stroke="#A08030" stroke-width="0.7" opacity="0.5"/>
+    <line x1="60" y1="75" x2="70" y2="72" stroke="#A08030" stroke-width="0.7" opacity="0.4"/>
+
+    <!-- Lace eyelets -->
+    <circle cx="55" cy="32" r="2" fill="#3B2508"/>
+    <circle cx="69" cy="32" r="2" fill="#3B2508"/>
+    <circle cx="55" cy="42" r="2" fill="#3B2508"/>
+    <circle cx="69" cy="42" r="2" fill="#3B2508"/>
+    <circle cx="55" cy="52" r="2" fill="#3B2508"/>
+    <circle cx="69" cy="52" r="2" fill="#3B2508"/>
+
+    <!-- Laces -->
+    <line x1="55" y1="32" x2="69" y2="42" stroke="#D4C090" stroke-width="1.2"/>
+    <line x1="69" y1="32" x2="55" y2="42" stroke="#D4C090" stroke-width="1.2"/>
+    <line x1="55" y1="42" x2="69" y2="52" stroke="#D4C090" stroke-width="1.2"/>
+    <line x1="69" y1="42" x2="55" y2="52" stroke="#D4C090" stroke-width="1.2"/>
+
+    <!-- Worn sole edge - uneven bottom -->
+    <path d="M10 115 Q20 117 30 115 Q45 113 60 115 Q75 117 90 115"
+          stroke="#2A1A06" stroke-width="1" fill="none" opacity="0.6"/>
+  </g>
+</svg>

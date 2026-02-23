@@ -76,7 +76,7 @@ func (o *Orchestrator) VscodePush() error {
 
 	// Step 4: package as .vsix.
 	logf("vscode:push: packaging extension as %s", vsixName)
-	packageCmd := exec.Command(binNpx, "@vscode/vsce", "package", "--no-dependencies")
+	packageCmd := exec.Command(binNpx, "@vscode/vsce", "package")
 	packageCmd.Dir = extDir
 	packageCmd.Stdout = os.Stdout
 	packageCmd.Stderr = os.Stderr

@@ -1,6 +1,6 @@
 {
   "name": "mage-orchestrator",
-  "displayName": "Mage Orchestrator Dashboard",
+  "displayName": "Cobbler",
   "description": "Status dashboard for cobbler-scaffold generation cycles",
   "version": "0.0.1",
   "publisher": "mesh-intelligence",
@@ -8,6 +8,7 @@
   "engines": {
     "vscode": "^1.85.0"
   },
+  "icon": "icon.png",
   "categories": [
     "Other"
   ],
@@ -62,8 +63,8 @@
       "activitybar": [
         {
           "id": "mage-orchestrator",
-          "title": "Mage Orchestrator",
-          "icon": "$(beaker)"
+          "title": "Cobbler",
+          "icon": "activity-icon.svg"
         }
       ]
     },
@@ -96,14 +97,17 @@
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "package": "vsce package"
+    "package": "vsce package",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.85.0",
     "@vscode/vsce": "^3.0.0",
-    "typescript": "^5.3.0"
+    "typescript": "^5.3.0",
+    "vitest": "^4.0.18"
   },
   "dependencies": {
     "js-yaml": "^4.1.1"

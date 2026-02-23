@@ -207,7 +207,7 @@ export class SpecGraph {
 // ---- Helpers ----
 
 /** Lists .yaml files in a directory. Returns empty array if the directory does not exist. */
-function listYamlFiles(dir: string): string[] {
+export function listYamlFiles(dir: string): string[] {
   try {
     return fs.readdirSync(dir).filter((f) => f.endsWith(".yaml"));
   } catch {
@@ -216,7 +216,7 @@ function listYamlFiles(dir: string): string[] {
 }
 
 /** Loads and parses a YAML file. Returns undefined on error. */
-function loadYaml(filePath: string): unknown {
+export function loadYaml(filePath: string): unknown {
   try {
     const content = fs.readFileSync(filePath, "utf-8");
     return yaml.load(content);
@@ -233,7 +233,7 @@ function loadYaml(filePath: string): unknown {
  *
  * After YAML parsing each item is an object like { T1: "..." }.
  */
-function parseTouchpoints(raw: unknown): Touchpoint[] {
+export function parseTouchpoints(raw: unknown): Touchpoint[] {
   if (!Array.isArray(raw)) {
     return [];
   }
@@ -258,7 +258,7 @@ function parseTouchpoints(raw: unknown): Touchpoint[] {
 }
 
 /** Parses a touchpoint from a plain string like "T1: description: prdId R1.1". */
-function parseTouchpointString(s: string): Touchpoint | undefined {
+export function parseTouchpointString(s: string): Touchpoint | undefined {
   const colonIdx = s.indexOf(":");
   if (colonIdx < 0) {
     return undefined;
@@ -269,7 +269,7 @@ function parseTouchpointString(s: string): Touchpoint | undefined {
 }
 
 /** Parses a touchpoint from a key-value pair. */
-function parseTouchpointFromKV(key: string, value: string): Touchpoint {
+export function parseTouchpointFromKV(key: string, value: string): Touchpoint {
   // Strip surrounding quotes if present.
   let desc = value;
   if (desc.startsWith('"') && desc.endsWith('"')) {
@@ -300,7 +300,7 @@ function parseTouchpointFromKV(key: string, value: string): Touchpoint {
  *     items:
  *       - R1.1: Description
  */
-function parseRequirements(
+export function parseRequirements(
   raw: unknown
 ): Record<string, PrdRequirement> {
   const result: Record<string, PrdRequirement> = {};
@@ -327,7 +327,7 @@ function parseRequirements(
  * Searches pkg/ and magefiles/ for lines containing the PRD ID string.
  * Uses grep via child_process for simplicity and performance.
  */
-function grepForPrdId(root: string, prdId: string): SourceRef[] {
+export function grepForPrdId(root: string, prdId: string): SourceRef[] {
   const refs: SourceRef[] = [];
   const dirs = ["pkg", "magefiles"]
     .map((d) => path.join(root, d))

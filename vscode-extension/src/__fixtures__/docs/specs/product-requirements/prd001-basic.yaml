@@ -1,0 +1,16 @@
+id: prd001-basic
+title: Basic PRD
+
+problem: |
+  A basic PRD for testing the spec model parser.
+
+requirements:
+  R1:
+    title: Config Struct
+    items:
+      - R1.1: ModulePath must be a string
+      - R1.2: BinaryName must be a string
+  R2:
+    title: Constructor
+    items:
+      - R2.1: New returns an instance

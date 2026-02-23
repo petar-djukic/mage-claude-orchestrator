@@ -8,10 +8,10 @@ import * as vscode from "vscode";
 import { SpecGraph } from "./specModel";
 
 /** Matches lines like: // prd: prd006-vscode-extension R8.1 */
-const PRD_PATTERN = /\/\/\s*prd:\s+(prd\d{3}-[\w-]+)/;
+export const PRD_PATTERN = /\/\/\s*prd:\s+(prd\d{3}-[\w-]+)/;
 
 /** Matches lines like: // uc: rel02.0-uc006-specification-browser */
-const UC_PATTERN = /\/\/\s*uc:\s+(rel[\w.-]+)/;
+export const UC_PATTERN = /\/\/\s*uc:\s+(rel[\w.-]+)/;
 
 /**
  * CodeLensProvider for Go source files. Detects // prd: and // uc:

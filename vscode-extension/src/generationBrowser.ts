@@ -12,7 +12,7 @@ const GENERATION_PREFIX = "generation-";
 
 // ---- Types ----
 
-type LifecycleState = "started" | "finished" | "merged" | "abandoned";
+export type LifecycleState = "started" | "finished" | "merged" | "abandoned";
 
 interface Generation {
   name: string;
@@ -257,7 +257,7 @@ export class GenerationBrowserProvider
 }
 
 /** Derives lifecycle state from which suffixed tags exist. */
-function deriveState(tagSet: Set<string>, genName: string): LifecycleState {
+export function deriveState(tagSet: Set<string>, genName: string): LifecycleState {
   if (tagSet.has(`${genName}-abandoned`)) {
     return "abandoned";
   }

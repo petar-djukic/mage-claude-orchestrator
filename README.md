@@ -197,6 +197,23 @@ go test -tags=usecase -v -run TestRel01_UC001_InitCreatesBD ./tests/rel01.0/uc00
 
 E2E tests download `github.com/petar-djukic/sdd-hello-world`, scaffold it once per package in `TestMain`, and copy the snapshot per test. Shared helpers live in `tests/rel01.0/internal/testutil/`. Test names follow the `TestRel01_UC{NNN}_Name` convention, and within each package tests run in parallel via `t.Parallel()` since each gets an isolated temp directory.
 
+## VS Code Extension
+
+The `mage vscode:push` target compiles, packages, and installs the extension into VS Code. It requires the `code` CLI on PATH.
+
+On macOS, open VS Code and run `Shell Command: Install 'code' command in PATH` from the Command Palette (Cmd+Shift+P), or add the following to `~/.zshrc`:
+
+```bash
+export PATH="/Applications/Visual Studio Code.app/Contents/Resources/app/bin:$PATH"
+```
+
+Then build and install:
+
+```bash
+mage vscode:push    # compile, package, install
+mage vscode:pop     # uninstall
+```
+
 ## License
 
 MIT

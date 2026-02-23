@@ -413,20 +413,6 @@ func (o *Orchestrator) checkPodman() error {
 	return o.ensureImage()
 }
 
-// clearClaudeHistory removes Claude conversation history files from $HOME.
-func clearClaudeHistory() {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		logf("clearClaudeHistory: cannot determine home dir: %v", err)
-		return
-	}
-	matches, _ := filepath.Glob(filepath.Join(home, ".claude.json*"))
-	for _, f := range matches {
-		logf("clearClaudeHistory: removing %s", f)
-		os.Remove(f)
-	}
-}
-
 // runClaude executes Claude inside a podman container and returns token
 // usage. The process is killed if ClaudeMaxTimeSec is exceeded.
 func (o *Orchestrator) runClaude(prompt, dir string, silence bool) (ClaudeResult, error) {
@@ -438,8 +424,6 @@ func (o *Orchestrator) runClaude(prompt, dir string, silence bool) (ClaudeResult
 	if err := o.ExtractCredentials(); err != nil {
 		logf("runClaude: credential refresh warning: %v", err)
 	}
-
-	clearClaudeHistory()
 
 	workDir := dir
 	if workDir == "" {

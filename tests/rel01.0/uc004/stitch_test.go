@@ -1,0 +1,107 @@
+//go:build usecase
+
+// Copyright (c) 2026 Petar Djukic. All rights reserved.
+// SPDX-License-Identifier: MIT
+
+package uc004_test
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/mesh-intelligence/cobbler-scaffold/pkg/orchestrator"
+	"github.com/mesh-intelligence/cobbler-scaffold/tests/rel01.0/internal/testutil"
+)
+
+var (
+	orchRoot    string
+	snapshotDir string
+)
+
+func TestMain(m *testing.M) {
+	var err error
+	orchRoot, err = testutil.FindOrchestratorRoot()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "e2e: resolving orchRoot: %v\n", err)
+		os.Exit(1)
+	}
+	snapshot, cleanup, prepErr := testutil.PrepareSnapshot(orchRoot)
+	if prepErr != nil {
+		fmt.Fprintf(os.Stderr, "e2e: preparing snapshot: %v\n", prepErr)
+		os.Exit(1)
+	}
+	snapshotDir = snapshot
+	exitCode := m.Run()
+	cleanup()
+	os.Exit(exitCode)
+}
+
+func TestRel01_UC004_StitchFailsWithoutBeads(t *testing.T) {
+	t.Parallel()
+	dir := testutil.SetupRepo(t, snapshotDir)
+	os.RemoveAll(filepath.Join(dir, ".beads"))
+	if err := testutil.RunMage(t, dir, "cobbler:stitch"); err == nil {
+		t.Fatal("expected cobbler:stitch to fail without .beads")
+	}
+}
+
+func TestRel01_UC004_StitchStopsWhenNoReadyTasks(t *testing.T) {
+	t.Parallel()
+	dir := testutil.SetupRepo(t, snapshotDir)
+
+	if err := testutil.RunMage(t, dir, "init"); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	if err := testutil.RunMage(t, dir, "generator:start"); err != nil {
+		t.Fatalf("generator:start: %v", err)
+	}
+
+	out, err := testutil.RunMageOut(t, dir, "cobbler:stitch")
+	if err != nil {
+		t.Fatalf("cobbler:stitch: %v", err)
+	}
+	if !strings.Contains(out, "completed 0 task(s)") {
+		t.Errorf("expected 'completed 0 task(s)' in output, got:\n%s", out)
+	}
+}
+
+// StitchExecutesOneTask runs 1 measure (MaxMeasureIssues=1) then 1 stitch
+// (MaxStitchIssuesPerCycle=1) and verifies the task was processed.
+func TestRel01_UC004_StitchExecutesOneTask(t *testing.T) {
+	t.Parallel()
+	dir := testutil.SetupRepo(t, snapshotDir)
+	testutil.SetupClaude(t, dir)
+
+	testutil.WriteConfigOverride(t, dir, func(cfg *orchestrator.Config) {
+		cfg.Cobbler.MaxMeasureIssues = 1
+		cfg.Cobbler.MaxStitchIssuesPerCycle = 1
+	})
+
+	if err := testutil.RunMage(t, dir, "reset"); err != nil {
+		t.Fatalf("reset: %v", err)
+	}
+	if err := testutil.RunMage(t, dir, "generator:start"); err != nil {
+		t.Fatalf("generator:start: %v", err)
+	}
+
+	headBefore := testutil.GitHead(t, dir)
+
+	if err := testutil.RunMage(t, dir, "cobbler:measure"); err != nil {
+		t.Fatalf("cobbler:measure: %v", err)
+	}
+	if n := testutil.CountReadyIssues(t, dir); n == 0 {
+		t.Fatal("expected at least 1 ready issue after measure, got 0")
+	}
+
+	if err := testutil.RunMage(t, dir, "cobbler:stitch"); err != nil {
+		t.Fatalf("cobbler:stitch: %v", err)
+	}
+
+	headAfter := testutil.GitHead(t, dir)
+	if headAfter == headBefore {
+		t.Error("expected git HEAD to advance after stitch, but it did not")
+	}
+}

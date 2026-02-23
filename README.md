@@ -129,7 +129,8 @@ magefiles/magefile.go  — build targets for this repository (includes scaffold:
 docs/                  — VISION, ARCHITECTURE, PRDs, use cases, test suites, constitutions
 docs/constitutions/    — design/planning/execution/go-style/testing constitutions (scaffolded into consuming projects)
 docs/prompts/          — measure and stitch prompt templates (scaffolded into consuming projects)
-tests/rel01.0/         — release 01 E2E tests against a scaffolded target repository
+tests/rel01.0/         — release 01 E2E tests; one package per use case (uc001/ through uc007/)
+tests/rel01.0/internal/testutil/ — shared test helpers (snapshot preparation, git/mage/beads wrappers)
 configuration.yaml     — orchestrator config (auto-created with defaults if missing)
 .claude/               — Claude Code skills and project rules
 ```
@@ -147,36 +148,54 @@ configuration.yaml     — orchestrator config (auto-created with defaults if mi
 ## Build and Test
 
 ```bash
-# Unit tests (pkg/orchestrator)
-mage test:unit
-
-# All E2E tests
-mage test:e2e
-
-# Single use case (see mage -l for all test:uc* targets)
-mage test:uc001OrchestratorInitialization
-mage test:uc003MeasureWorkflow
-
-# Full suite including Claude-gated tests (requires podman image and credentials)
-mage credentials  # extract Claude credentials from macOS Keychain
-mage test:e2e     # runs all E2E tests including Claude-gated ones
-
-# Run tests directly (do NOT use bare "go test" at the repo root —
-# the root package is a mage entrypoint and requires the mage toolchain)
-go test ./pkg/orchestrator/...                # unit tests
-go test ./tests/rel01.0/...                       # all E2E tests
-go test -run TestRel01_UC003 ./tests/rel01.0/...  # single use case
-
-# Scaffold a target repo for manual testing
-mage scaffold:push /path/to/target
-
-# Build, lint, install
 mage build
 mage lint
 mage install
 ```
 
-E2E tests download `github.com/petar-djukic/go-unix-utils`, scaffold it once in `TestMain`, and copy the snapshot per test. Test names follow the `Test{Suite}_UC{NNN}_Name` convention (see [testing constitution](docs/constitutions/testing.yaml)), enabling filtering by suite or use case. Each use case has a corresponding mage target (`test:uc001OrchestratorInitialization` through `test:uc007BuildTooling`).
+### Running Tests via Mage
+
+Mage targets handle build tags and flags automatically.
+
+```bash
+mage test:unit            # unit tests (pkg/orchestrator)
+mage test:e2e             # all E2E use cases — packages run in parallel
+mage test:uc 001          # single use case by number
+```
+
+### Running Tests via go test
+
+E2E tests require the `-tags=usecase` build tag. Each use case lives in its own package under `tests/rel01.0/ucNNN/`, so Go runs them as independent processes with separate pass/fail reporting.
+
+```bash
+# Unit tests (no tag needed)
+go test ./pkg/orchestrator/...
+
+# All E2E tests — packages run in parallel
+go test -tags=usecase -v -count=1 -timeout 1800s ./tests/rel01.0/...
+
+# Single use case
+go test -tags=usecase -v -count=1 ./tests/rel01.0/uc001/
+
+# Single test by name
+go test -tags=usecase -v -run TestRel01_UC001_InitCreatesBD ./tests/rel01.0/uc001/
+```
+
+### Use Case Index
+
+| UC | Package | Description | Requires Claude |
+| --- | --- | --- | --- |
+| 001 | `uc001/` | Init, reset, defaults | No |
+| 002 | `uc002/` | Generation lifecycle (start, stop, list, switch, reset, one cycle) | One test |
+| 003 | `uc003/` | Measure workflow (error path, one measure) | One test |
+| 004 | `uc004/` | Stitch workflow (error path, no-op, one measure+stitch) | One test |
+| 005 | `uc005/` | Resume from interruption | No |
+| 006 | `uc006/` | Scaffold push/pop | No |
+| 007 | `uc007/` | Build, install, clean, stats | No |
+
+### Test Architecture
+
+E2E tests download `github.com/petar-djukic/sdd-hello-world`, scaffold it once per package in `TestMain`, and copy the snapshot per test. Shared helpers live in `tests/rel01.0/internal/testutil/`. Test names follow the `TestRel01_UC{NNN}_Name` convention, and within each package tests run in parallel via `t.Parallel()` since each gets an isolated temp directory.
 
 ## License
 

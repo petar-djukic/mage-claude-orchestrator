@@ -1,11 +1,12 @@
-//go:build e2e
+//go:build usecase
 
 // Copyright (c) 2026 Petar Djukic. All rights reserved.
 // SPDX-License-Identifier: MIT
 
-package e2e_test
+package uc006_test
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,46 +14,66 @@ import (
 	"testing"
 
 	"github.com/mesh-intelligence/cobbler-scaffold/pkg/orchestrator"
+	"github.com/mesh-intelligence/cobbler-scaffold/tests/rel01.0/internal/testutil"
 )
 
-// TestRel01_UC006_ConstitutionFiles verifies that all constitution files
-// are written to docs/constitutions/ by PrepareTestRepo/Scaffold.
+var (
+	orchRoot    string
+	snapshotDir string
+)
+
+func TestMain(m *testing.M) {
+	var err error
+	orchRoot, err = testutil.FindOrchestratorRoot()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "e2e: resolving orchRoot: %v\n", err)
+		os.Exit(1)
+	}
+	snapshot, cleanup, prepErr := testutil.PrepareSnapshot(orchRoot)
+	if prepErr != nil {
+		fmt.Fprintf(os.Stderr, "e2e: preparing snapshot: %v\n", prepErr)
+		os.Exit(1)
+	}
+	snapshotDir = snapshot
+	exitCode := m.Run()
+	cleanup()
+	os.Exit(exitCode)
+}
+
 func TestRel01_UC006_ConstitutionFiles(t *testing.T) {
-	dir := setupRepo(t)
+	t.Parallel()
+	dir := testutil.SetupRepo(t, snapshotDir)
 	for _, name := range []string{"planning.yaml", "execution.yaml", "design.yaml", "go-style.yaml"} {
 		rel := filepath.Join("docs", "constitutions", name)
-		if !fileExists(dir, rel) {
+		if !testutil.FileExists(dir, rel) {
 			t.Errorf("expected %s to exist after scaffold", rel)
 		}
 	}
 }
 
-// TestRel01_UC006_PromptFiles verifies that prompt YAML files
-// are written to docs/prompts/ by PrepareTestRepo/Scaffold.
 func TestRel01_UC006_PromptFiles(t *testing.T) {
-	dir := setupRepo(t)
+	t.Parallel()
+	dir := testutil.SetupRepo(t, snapshotDir)
 	for _, name := range []string{"measure.yaml", "stitch.yaml"} {
 		rel := filepath.Join("docs", "prompts", name)
-		if !fileExists(dir, rel) {
+		if !testutil.FileExists(dir, rel) {
 			t.Errorf("expected %s to exist after scaffold", rel)
 		}
 	}
 }
 
-// TestRel01_UC006_ConfigAndMagefile verifies that configuration.yaml and
-// magefiles/orchestrator.go are present after scaffold.
 func TestRel01_UC006_ConfigAndMagefile(t *testing.T) {
-	dir := setupRepo(t)
+	t.Parallel()
+	dir := testutil.SetupRepo(t, snapshotDir)
 	for _, rel := range []string{"configuration.yaml", filepath.Join("magefiles", "orchestrator.go")} {
-		if !fileExists(dir, rel) {
+		if !testutil.FileExists(dir, rel) {
 			t.Errorf("expected %s to exist after scaffold", rel)
 		}
 	}
 }
 
-// TestRel01_UC006_RejectSelfTarget verifies that scaffold:push and scaffold:pop
-// refuse to operate on the orchestrator repository itself.
 func TestRel01_UC006_RejectSelfTarget(t *testing.T) {
+	t.Parallel()
 	for _, target := range []string{"scaffold:push", "scaffold:pop"} {
 		t.Run(target, func(t *testing.T) {
 			cmd := exec.Command("mage", "-d", ".", target, ".")
@@ -68,19 +89,14 @@ func TestRel01_UC006_RejectSelfTarget(t *testing.T) {
 	}
 }
 
-// TestRel01_UC006_PushPopRoundTrip creates an empty Go repository, scaffolds the
-// orchestrator into it, verifies all expected files exist and mage targets are
-// available, then removes the scaffold with Uninstall and verifies all
-// orchestrator files are gone.
 func TestRel01_UC006_PushPopRoundTrip(t *testing.T) {
-	// Load config from the orchestrator repo root.
+	t.Parallel()
 	cfg, err := orchestrator.LoadConfig(filepath.Join(orchRoot, "configuration.yaml"))
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
 	orch := orchestrator.New(cfg)
 
-	// Create an empty Go repository in a temp directory.
 	dir := t.TempDir()
 	for _, args := range [][]string{
 		{"go", "mod", "init", "example.com/roundtrip-test"},
@@ -96,7 +112,6 @@ func TestRel01_UC006_PushPopRoundTrip(t *testing.T) {
 		}
 	}
 
-	// Create a minimal magefiles directory so Scaffold has somewhere to write.
 	if err := os.MkdirAll(filepath.Join(dir, "magefiles"), 0o755); err != nil {
 		t.Fatalf("mkdir magefiles: %v", err)
 	}
@@ -106,7 +121,6 @@ func TestRel01_UC006_PushPopRoundTrip(t *testing.T) {
 		t.Fatalf("Scaffold: %v", err)
 	}
 
-	// Verify all expected files exist after push.
 	pushExpected := []string{
 		filepath.Join("magefiles", "orchestrator.go"),
 		"configuration.yaml",
@@ -119,12 +133,11 @@ func TestRel01_UC006_PushPopRoundTrip(t *testing.T) {
 		filepath.Join("magefiles", "go.mod"),
 	}
 	for _, rel := range pushExpected {
-		if !fileExists(dir, rel) {
+		if !testutil.FileExists(dir, rel) {
 			t.Errorf("after push: expected %s to exist", rel)
 		}
 	}
 
-	// Verify mage -l works in the scaffolded repo.
 	mageCmd := exec.Command("mage", "-d", ".", "-l")
 	mageCmd.Dir = dir
 	mageOut, err := mageCmd.CombinedOutput()
@@ -140,7 +153,6 @@ func TestRel01_UC006_PushPopRoundTrip(t *testing.T) {
 		t.Fatalf("Uninstall: %v", err)
 	}
 
-	// Verify scaffolded files are removed after pop.
 	popRemoved := []string{
 		filepath.Join("magefiles", "orchestrator.go"),
 		"configuration.yaml",
@@ -148,13 +160,12 @@ func TestRel01_UC006_PushPopRoundTrip(t *testing.T) {
 		filepath.Join("docs", "prompts"),
 	}
 	for _, rel := range popRemoved {
-		if fileExists(dir, rel) {
+		if testutil.FileExists(dir, rel) {
 			t.Errorf("after pop: expected %s to be removed", rel)
 		}
 	}
 
-	// Verify magefiles/go.mod is preserved (pop does not delete it).
-	if !fileExists(dir, filepath.Join("magefiles", "go.mod")) {
+	if !testutil.FileExists(dir, filepath.Join("magefiles", "go.mod")) {
 		t.Error("after pop: expected magefiles/go.mod to be preserved")
 	}
 }

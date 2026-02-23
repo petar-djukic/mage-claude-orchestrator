@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/mesh-intelligence/cobbler-scaffold/pkg/orchestrator"
 )
@@ -72,43 +71,45 @@ func TestRel01_UC003_BeadsResetClearsAfterMeasure(t *testing.T) {
 	}
 }
 
-// TestRel01_UC003_TimingByLimit runs measure with limits 1 through 5 and logs
-// the wall-clock time and issue count for each.
+// BenchmarkRel01_UC003_TimingByLimit runs measure with limits 1 through 5 and
+// reports wall-clock time and issue count for each.
 //
-//	go test -v -count=1 -timeout 0 -run TestRel01_UC003_TimingByLimit ./tests/rel01.0/...
-func TestRel01_UC003_TimingByLimit(t *testing.T) {
-	dir := setupRepo(t)
-	setupClaude(t, dir)
+//	go test -tags e2e -bench BenchmarkRel01_UC003_TimingByLimit -benchtime 1x -timeout 0 ./tests/rel01.0/...
+func BenchmarkRel01_UC003_TimingByLimit(b *testing.B) {
+	dir := setupRepo(b)
+	setupClaude(b, dir)
 
-	if err := runMage(t, dir, "reset"); err != nil {
-		t.Fatalf("reset: %v", err)
+	if err := runMage(b, dir, "reset"); err != nil {
+		b.Fatalf("reset: %v", err)
 	}
-	if err := runMage(t, dir, "init"); err != nil {
-		t.Fatalf("init: %v", err)
+	if err := runMage(b, dir, "init"); err != nil {
+		b.Fatalf("init: %v", err)
 	}
 
 	for limit := 1; limit <= 5; limit++ {
-		t.Run(fmt.Sprintf("limit_%d", limit), func(t *testing.T) {
-			// Reset beads between runs so each starts with zero issues.
-			if err := runMage(t, dir, "beads:reset"); err != nil {
-				t.Fatalf("beads:reset: %v", err)
+		b.Run(fmt.Sprintf("limit_%d", limit), func(b *testing.B) {
+			b.StopTimer()
+			if err := runMage(b, dir, "beads:reset"); err != nil {
+				b.Fatalf("beads:reset: %v", err)
 			}
-			if err := runMage(t, dir, "init"); err != nil {
-				t.Fatalf("init: %v", err)
+			if err := runMage(b, dir, "init"); err != nil {
+				b.Fatalf("init: %v", err)
 			}
 
-			writeConfigOverride(t, dir, func(cfg *orchestrator.Config) {
+			writeConfigOverride(b, dir, func(cfg *orchestrator.Config) {
 				cfg.Cobbler.MaxMeasureIssues = limit
 			})
+			b.StartTimer()
 
-			start := time.Now()
-			if err := runMage(t, dir, "cobbler:measure"); err != nil {
-				t.Fatalf("cobbler:measure (limit=%d): %v", limit, err)
+			for range b.N {
+				if err := runMage(b, dir, "cobbler:measure"); err != nil {
+					b.Fatalf("cobbler:measure (limit=%d): %v", limit, err)
+				}
 			}
-			elapsed := time.Since(start).Round(time.Second)
 
-			n := countReadyIssues(t, dir)
-			t.Logf("limit=%d issues=%d time=%s", limit, n, elapsed)
+			b.StopTimer()
+			n := countReadyIssues(b, dir)
+			b.ReportMetric(float64(n), "issues")
 		})
 	}
 }

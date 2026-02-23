@@ -105,7 +105,7 @@ func prepareSnapshot() (string, func(), error) {
 // setupRepo copies the global snapshot to a fresh temp directory, initialises
 // a new git repo inside it, and registers t.Cleanup to remove the directory.
 // Each test gets an isolated, fully-scaffolded repo in a few seconds.
-func setupRepo(t *testing.T) string {
+func setupRepo(t testing.TB) string {
 	t.Helper()
 	workDir, err := os.MkdirTemp("", "e2e-test-*")
 	if err != nil {
@@ -143,7 +143,7 @@ func setupRepo(t *testing.T) string {
 }
 
 // runMage runs a mage target in dir and returns an error on non-zero exit.
-func runMage(t *testing.T, dir string, target ...string) error {
+func runMage(t testing.TB, dir string, target ...string) error {
 	t.Helper()
 	_, err := runMageOut(t, dir, target...)
 	return err
@@ -152,7 +152,7 @@ func runMage(t *testing.T, dir string, target ...string) error {
 // runMageOut runs a mage target in dir and returns combined stdout+stderr.
 // Output is streamed to os.Stderr in real-time (visible with go test -v)
 // so that long-running Claude invocations show progress.
-func runMageOut(t *testing.T, dir string, target ...string) (string, error) {
+func runMageOut(t testing.TB, dir string, target ...string) (string, error) {
 	t.Helper()
 	args := append([]string{"-d", "."}, target...)
 	cmd := exec.Command("mage", args...)
@@ -174,7 +174,7 @@ func fileExists(dir, rel string) bool {
 }
 
 // gitBranch returns the current branch name in dir.
-func gitBranch(t *testing.T, dir string) string {
+func gitBranch(t testing.TB, dir string) string {
 	t.Helper()
 	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
 	cmd.Dir = dir
@@ -186,7 +186,7 @@ func gitBranch(t *testing.T, dir string) string {
 }
 
 // gitTagExists returns true if the named tag exists in the repo at dir.
-func gitTagExists(t *testing.T, dir, tag string) bool {
+func gitTagExists(t testing.TB, dir, tag string) bool {
 	t.Helper()
 	cmd := exec.Command("git", "tag", "-l", tag)
 	cmd.Dir = dir
@@ -198,7 +198,7 @@ func gitTagExists(t *testing.T, dir, tag string) bool {
 }
 
 // gitListBranchesMatching returns branches in dir whose names contain substr.
-func gitListBranchesMatching(t *testing.T, dir, substr string) []string {
+func gitListBranchesMatching(t testing.TB, dir, substr string) []string {
 	t.Helper()
 	cmd := exec.Command("git", "branch", "--list", "*"+substr+"*")
 	cmd.Dir = dir
@@ -218,7 +218,7 @@ func gitListBranchesMatching(t *testing.T, dir, substr string) []string {
 }
 
 // gitHead returns the full SHA of HEAD in dir.
-func gitHead(t *testing.T, dir string) string {
+func gitHead(t testing.TB, dir string) string {
 	t.Helper()
 	cmd := exec.Command("git", "rev-parse", "HEAD")
 	cmd.Dir = dir
@@ -233,7 +233,7 @@ func gitHead(t *testing.T, dir string) string {
 // tasks. Uses the same command the orchestrator uses (bd ready --json --type
 // task) rather than bd list --status ready, since tasks may be in states
 // visible to bd ready (pending, ready) but not to bd list --status ready.
-func countReadyIssues(t *testing.T, dir string) int {
+func countReadyIssues(t testing.TB, dir string) int {
 	t.Helper()
 	cmd := exec.Command("bd", "ready", "--json", "--type", "task")
 	cmd.Dir = dir
@@ -254,7 +254,7 @@ const claudeImage = "localhost/cobbler-scaffold:latest"
 // setupClaude extracts Claude credentials into the test repo and configures
 // the podman image in configuration.yaml. Call this at the start of every
 // Claude-gated test before running any mage cobbler or generator targets.
-func setupClaude(t *testing.T, dir string) {
+func setupClaude(t testing.TB, dir string) {
 	t.Helper()
 	if err := runMage(t, dir, "credentials"); err != nil {
 		t.Fatalf("setupClaude: mage credentials: %v", err)
@@ -267,7 +267,7 @@ func setupClaude(t *testing.T, dir string) {
 // writeConfigOverride reads configuration.yaml in dir using raw YAML unmarshal
 // (not LoadConfig, to avoid expanding constitution paths to their file content),
 // applies modify, and writes the result back.
-func writeConfigOverride(t *testing.T, dir string, modify func(*orchestrator.Config)) {
+func writeConfigOverride(t testing.TB, dir string, modify func(*orchestrator.Config)) {
 	t.Helper()
 	cfgPath := filepath.Join(dir, "configuration.yaml")
 	data, err := os.ReadFile(cfgPath)
@@ -364,7 +364,7 @@ func copyFile(src, dst string) error {
 
 // issueHasField checks whether any issue listed by "bd list --json" contains
 // the given field name in its JSON output.
-func issueHasField(t *testing.T, dir, field string) bool {
+func issueHasField(t testing.TB, dir, field string) bool {
 	t.Helper()
 	cmd := exec.Command("bd", "list", "--json")
 	cmd.Dir = dir
@@ -381,7 +381,7 @@ func containsField(jsonStr, value string) bool {
 }
 
 // createIssue creates a beads issue via the bd CLI and returns the issue ID.
-func createIssue(t *testing.T, dir, title string) string {
+func createIssue(t testing.TB, dir, title string) string {
 	t.Helper()
 	cmd := exec.Command("bd", "create", "--type", "task",
 		"--title", title, "--description", "created by e2e test")

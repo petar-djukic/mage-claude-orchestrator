@@ -63,7 +63,11 @@ articles:
       (snake_case for Go files, kebab-case for YAML documents). When creating
       a new package, use the name from ARCHITECTURE.yaml. Do not invent novel
       file names. If the PRD names a component "crumb", the file is crumb.go,
-      not item.go or entity.go.
+      not item.go or entity.go. Go packages must name the primary source file
+      after the primary exported type, not the package name.
+      `testutils/testutils.go` is forbidden; if the primary type is
+      `DiffTest`, the file is `difftest.go`. Test files mirror source:
+      `difftest_test.go`.
 
   - id: P8
     title: Deterministic ordering
@@ -76,6 +80,17 @@ articles:
       When two tasks have equal priority under these rules, order by the
       primary file path alphabetically. This ensures the same input produces
       the same task sequence.
+
+  - id: P9
+    title: Requirement granularity
+    rule: |
+      Code tasks target 5-8 requirements, 5-8 acceptance criteria, and 3-5
+      design decisions. Documentation tasks target 2-4 requirements and 3-5
+      acceptance criteria. Each PRD requirement maps to exactly one task
+      requirement. Do not inflate counts by splitting a single requirement
+      into sub-bullets, and do not deflate counts by merging unrelated
+      requirements. If a task falls outside these ranges, re-examine the
+      decomposition.
 
 issue_structure:
   common_fields:

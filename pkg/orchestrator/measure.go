@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -369,6 +370,7 @@ func (o *Orchestrator) buildMeasurePrompt(userInput, existingIssues string, limi
 		Task:                    substitutePlaceholders(tmpl.Task, placeholders),
 		Constraints:             substitutePlaceholders(tmpl.Constraints, placeholders),
 		OutputFormat:            substitutePlaceholders(tmpl.OutputFormat, placeholders),
+		GoldenExample:           o.cfg.Cobbler.GoldenExample,
 		AdditionalContext:       userInput,
 	}
 
@@ -407,6 +409,9 @@ func (o *Orchestrator) importIssues(yamlFile string) ([]string, error) {
 	for i, issue := range issues {
 		logf("importIssues: [%d] title=%q dep=%d", i, issue.Title, issue.Dependency)
 	}
+
+	// Advisory validation: warn about granularity or naming issues.
+	validateMeasureOutput(issues)
 
 	// Pass 1: create all issues and collect their beads IDs.
 	indexToID := make(map[int]string)
@@ -462,6 +467,74 @@ func (o *Orchestrator) importIssues(yamlFile string) ([]string, error) {
 	appendMeasureLog(o.cfg.Cobbler.Dir, issues)
 
 	return ids, nil
+}
+
+// issueDescription is the subset of fields parsed from an issue description
+// YAML for advisory validation.
+type issueDescription struct {
+	DeliverableType    string              `yaml:"deliverable_type"`
+	Files              []issueDescFile     `yaml:"files"`
+	Requirements       []issueDescItem     `yaml:"requirements"`
+	AcceptanceCriteria []issueDescItem     `yaml:"acceptance_criteria"`
+	DesignDecisions    []issueDescItem     `yaml:"design_decisions"`
+}
+
+type issueDescFile struct {
+	Path string `yaml:"path"`
+}
+
+type issueDescItem struct {
+	ID   string `yaml:"id"`
+	Text string `yaml:"text"`
+}
+
+// validateMeasureOutput performs advisory checks on proposed issues and logs
+// warnings. It does not block import. Checks:
+//   - R/AC/D counts against P9 ranges
+//   - File names that match their parent package name (P7 violation)
+func validateMeasureOutput(issues []proposedIssue) {
+	for _, issue := range issues {
+		var desc issueDescription
+		if err := yaml.Unmarshal([]byte(issue.Description), &desc); err != nil {
+			logf("validateMeasureOutput: [%d] %q: could not parse description: %v", issue.Index, issue.Title, err)
+			continue
+		}
+
+		rCount := len(desc.Requirements)
+		acCount := len(desc.AcceptanceCriteria)
+		dCount := len(desc.DesignDecisions)
+
+		if desc.DeliverableType == "code" {
+			if rCount < 5 || rCount > 8 {
+				logf("validateMeasureOutput: [%d] %q: requirement count %d outside P9 range 5-8", issue.Index, issue.Title, rCount)
+			}
+			if acCount < 5 || acCount > 8 {
+				logf("validateMeasureOutput: [%d] %q: acceptance criteria count %d outside P9 range 5-8", issue.Index, issue.Title, acCount)
+			}
+			if dCount < 3 || dCount > 5 {
+				logf("validateMeasureOutput: [%d] %q: design decision count %d outside P9 range 3-5", issue.Index, issue.Title, dCount)
+			}
+		} else if desc.DeliverableType == "documentation" {
+			if rCount < 2 || rCount > 4 {
+				logf("validateMeasureOutput: [%d] %q: requirement count %d outside P9 doc range 2-4", issue.Index, issue.Title, rCount)
+			}
+			if acCount < 3 || acCount > 5 {
+				logf("validateMeasureOutput: [%d] %q: acceptance criteria count %d outside P9 doc range 3-5", issue.Index, issue.Title, acCount)
+			}
+		}
+
+		// Check for P7 violation: file named after its package.
+		for _, f := range desc.Files {
+			parts := strings.Split(f.Path, "/")
+			if len(parts) >= 2 {
+				dir := parts[len(parts)-2]
+				file := parts[len(parts)-1]
+				if file == dir+".go" || file == dir+"_test.go" {
+					logf("validateMeasureOutput: [%d] %q: file %s matches package name (P7 violation)", issue.Index, issue.Title, f.Path)
+				}
+			}
+		}
+	}
 }
 
 // saveHistory persists measure artifacts (log, issues YAML) to the configured

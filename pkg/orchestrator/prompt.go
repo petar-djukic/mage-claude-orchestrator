@@ -22,6 +22,7 @@ type MeasurePromptDoc struct {
 	Task                    string          `yaml:"task"`
 	Constraints             string          `yaml:"constraints"`
 	OutputFormat            string          `yaml:"output_format"`
+	GoldenExample           string          `yaml:"golden_example,omitempty"`
 	AdditionalContext       string          `yaml:"additional_context,omitempty"`
 }
 

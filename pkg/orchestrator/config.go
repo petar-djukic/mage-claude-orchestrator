@@ -152,6 +152,12 @@ type CobblerConfig struct {
 	// Passed to the measure prompt template as LinesMax.
 	EstimatedLinesMax int `yaml:"estimated_lines_max"`
 
+	// GoldenExample is a file path to a golden example issue YAML.
+	// During LoadConfig the file is read and its content stored here.
+	// When present, the measure prompt instructs Claude to match this
+	// example's style, granularity, and naming conventions.
+	GoldenExample string `yaml:"golden_example"`
+
 	// HistoryDir is the directory for saving measure artifacts (prompt,
 	// issues YAML, stream-json log) per iteration. Default "history".
 	HistoryDir string `yaml:"history_dir"`
@@ -376,6 +382,7 @@ func LoadConfig(path string) (Config, error) {
 		&cfg.Cobbler.ExecutionConstitution,
 		&cfg.Cobbler.DesignConstitution,
 		&cfg.Cobbler.GoStyleConstitution,
+		&cfg.Cobbler.GoldenExample,
 	} {
 		if err := readFileInto(field); err != nil {
 			return Config{}, err

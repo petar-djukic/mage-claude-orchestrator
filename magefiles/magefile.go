@@ -175,10 +175,15 @@ func (Test) Unit() error {
 
 // E2e runs all E2E use-case tests. Packages run in parallel.
 func (Test) E2e() error {
-	cmd := exec.Command("go", "test", "-tags=usecase", "-v", "-count=1", "-timeout", "1800s", "./tests/rel01.0/...")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	for _, pkg := range []string{"./tests/rel01.0/...", "./tests/e2e/..."} {
+		cmd := exec.Command("go", "test", "-tags=usecase", "-v", "-count=1", "-timeout", "1800s", pkg)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Uc runs E2E tests for a single use case by number (e.g., mage test:uc 001).

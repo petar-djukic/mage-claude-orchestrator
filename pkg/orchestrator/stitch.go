@@ -466,9 +466,11 @@ func (o *Orchestrator) doOneTask(task stitchTask, baseBranch, repoRoot string) e
 	}
 	logf("doOneTask: merge completed in %s", time.Since(mergeStart).Round(time.Second))
 
-	// Capture LOC diff and post-merge LOC.
+	// Capture LOC diff, per-file diff, and post-merge LOC.
 	diff, _ := gitDiffShortstat(preMergeRef)
 	logf("doOneTask: diff files=%d ins=%d del=%d", diff.FilesChanged, diff.Insertions, diff.Deletions)
+	fileChanges, _ := gitDiffNameStatus(preMergeRef)
+	logf("doOneTask: fileChanges=%d entries", len(fileChanges))
 	locAfter := o.captureLOC()
 	logf("doOneTask: locAfter prod=%d test=%d", locAfter.Production, locAfter.Test)
 
@@ -491,6 +493,18 @@ func (o *Orchestrator) doOneTask(task stitchTask, baseBranch, repoRoot string) e
 		LOCBefore: locBefore,
 		LOCAfter:  locAfter,
 		Diff:      historyDiff{Files: diff.FilesChanged, Insertions: diff.Insertions, Deletions: diff.Deletions},
+	})
+
+	// Save stitch report with per-file diffstat.
+	o.saveHistoryReport(historyTS, StitchReport{
+		TaskID:    task.id,
+		TaskTitle: task.title,
+		Status:    "success",
+		Branch:    task.branchName,
+		Diff:      historyDiff{Files: diff.FilesChanged, Insertions: diff.Insertions, Deletions: diff.Deletions},
+		Files:     fileChanges,
+		LOCBefore: locBefore,
+		LOCAfter:  locAfter,
 	})
 
 	// Close task with metrics.

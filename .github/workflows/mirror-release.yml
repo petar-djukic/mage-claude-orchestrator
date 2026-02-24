@@ -1,0 +1,21 @@
+name: Mirror to release
+
+on:
+  push:
+    branches: [main]
+    tags: ["*"]
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Push to release
+        run: |
+          git remote add release https://x-access-token:${{ secrets.RELEASE_TOKEN }}@github.com/mesh-intelligence/${{ github.event.repository.name }}.git
+          git push release main
+          git push release --tags

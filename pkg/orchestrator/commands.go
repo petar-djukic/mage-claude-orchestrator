@@ -299,7 +299,6 @@ func bdShowJSON(id string) ([]byte, error) {
 	return exec.Command(binBd, "show", "--json", id).Output()
 }
 
-
 // diffStat holds parsed output from git diff --shortstat.
 type diffStat struct {
 	FilesChanged int

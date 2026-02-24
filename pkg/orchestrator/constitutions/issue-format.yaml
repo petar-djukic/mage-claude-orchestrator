@@ -38,14 +38,11 @@ yaml_rules:
     example_bad: "Flag interactions — especially combined flags"
     example_good: "Flag interactions -- especially combined flags"
 
-  - rule: Design decision IDs use D1, D2, ... prefix as mapping keys.
+  - rule: Requirements, design decisions, and acceptance criteria are all mappings with id and text fields.
     example_bad: "- Use singleton pattern"
     example_good: |
       - id: D1
         text: Use singleton pattern
-
-  - rule: Requirement strings should be quoted when they contain colons.
-    example_good: '- "R1: Implement ExampleType per prd001"'
 
 field_specs:
   deliverable_type:
@@ -79,11 +76,17 @@ field_specs:
         description: Brief purpose of this file change.
 
   requirements:
-    type: list of strings
+    type: list of mappings
     required: true
-    description: |
-      What needs to be built or written. Be specific and actionable.
-      Each item should be a quoted string when it contains colons.
+    sub_fields:
+      id:
+        type: string
+        required: true
+        description: "Sequential ID: R1, R2, R3, ..."
+      text:
+        type: string
+        required: true
+        description: What needs to be built or written. Be specific and actionable.
 
   design_decisions:
     type: list of mappings
@@ -99,10 +102,17 @@ field_specs:
         description: The decision text.
 
   acceptance_criteria:
-    type: list of strings
+    type: list of mappings
     required: true
-    description: |
-      Checkable outcomes. Must be verifiable without ambiguity.
+    sub_fields:
+      id:
+        type: string
+        required: true
+        description: "Sequential ID: AC1, AC2, AC3, ..."
+      text:
+        type: string
+        required: true
+        description: Checkable outcome. Must be verifiable without ambiguity.
 
   format_rule:
     type: string
@@ -134,9 +144,12 @@ examples:
         note: CrumbTable implementation
 
     requirements:
-      - "R1: Implement CrumbTable interface per prd003-crumbs-interface"
-      - "R2: Add, Get, Archive, Purge, Fetch operations"
-      - "R3: Property operations (Set/Get/Clear)"
+      - id: R1
+        text: Implement CrumbTable interface per prd003-crumbs-interface
+      - id: R2
+        text: Add, Get, Archive, Purge, Fetch operations
+      - id: R3
+        text: Property operations (Set/Get/Clear)
 
     design_decisions:
       - id: D1
@@ -145,9 +158,12 @@ examples:
         text: Filter as map[string]any per PRD
 
     acceptance_criteria:
-      - All CrumbTable operations implemented
-      - Tests pass for each operation
-      - Errors match PRD error types
+      - id: AC1
+        text: All CrumbTable operations implemented
+      - id: AC2
+        text: Tests pass for each operation
+      - id: AC3
+        text: Errors match PRD error types
 
   documentation_issue: |
     deliverable_type: documentation
@@ -169,10 +185,15 @@ examples:
       - "Acceptance Criteria: checkable outcomes"
 
     requirements:
-      - "R1: Write PRD covering all identified requirements"
-      - "R2: Include acceptance criteria for each requirement"
+      - id: R1
+        text: Write PRD covering all identified requirements
+      - id: R2
+        text: Include acceptance criteria for each requirement
 
     acceptance_criteria:
-      - All required sections present
-      - File saved as prd-feature-name.yaml
-      - Requirements numbered and specific
+      - id: AC1
+        text: All required sections present
+      - id: AC2
+        text: File saved as prd-feature-name.yaml
+      - id: AC3
+        text: Requirements numbered and specific

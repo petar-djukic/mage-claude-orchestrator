@@ -99,7 +99,18 @@ When you close the **last issue in an epic** (all child tasks complete):
    - If all criteria are met, update road-map.yaml to mark the use case status as "done"
    - If not complete, note what remains and ensure follow-up tasks exist
 4. **File follow-up issues** for any gaps discovered
-5. **Summarize epic completion**: run `mage stats` and report what was built and use case status
+5. **Close linked GitHub issue** (if applicable):
+   - If the epic title starts with `GH-<number>:`, close the corresponding GitHub issue:
+
+     ```bash
+     bd epic close-eligible
+     gh issue close <number> --repo petar-djukic/cobbler-scaffold --comment "Completed locally. Epic: <epic-id>"
+     bd sync
+     git add -A
+     git commit -m "Close GH-<number>: <title>"
+     ```
+
+6. **Summarize epic completion**: run `mage stats` and report what was built and use case status
 
 ---
 
@@ -187,7 +198,18 @@ When you close the **last issue in an epic** (all child tasks complete), perform
    - Review success criteria in `docs/specs/use-cases/`
    - If all criteria are met, update road-map.yaml to mark the use case status as "done"
    - If not complete, note what remains and ensure follow-up tasks exist
-8. **Summarize epic completion**: run `mage stats` and report:
+8. **Close linked GitHub issue** (if applicable):
+   - If the epic title starts with `GH-<number>:`, close the corresponding GitHub issue:
+
+     ```bash
+     bd epic close-eligible
+     gh issue close <number> --repo petar-djukic/cobbler-scaffold --comment "Completed locally. Epic: <epic-id>"
+     bd sync
+     git add -A
+     git commit -m "Close GH-<number>: <title>"
+     ```
+
+9. **Summarize epic completion**: run `mage stats` and report:
    - What was built (components, features)
    - Total metrics (tokens, LOC across all child issues)
    - Any deviations from original design

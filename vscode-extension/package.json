@@ -57,6 +57,22 @@
       {
         "command": "mageOrchestrator.viewRequirement",
         "title": "Mage Orchestrator: View Requirement"
+      },
+      {
+        "command": "mageOrchestrator.compareTags",
+        "title": "Mage Orchestrator: Compare Tags"
+      },
+      {
+        "command": "mageOrchestrator.compareGenerations",
+        "title": "Mage Orchestrator: Compare Generations"
+      },
+      {
+        "command": "mageOrchestrator.selectForCompare",
+        "title": "Compare With..."
+      },
+      {
+        "command": "mageOrchestrator.openComparisonDiff",
+        "title": "Open Diff"
       }
     ],
     "viewsContainers": {
@@ -74,6 +90,11 @@
           "command": "mageOrchestrator.switch",
           "when": "view == mageOrchestrator.status && viewItem == generation",
           "group": "navigation"
+        },
+        {
+          "command": "mageOrchestrator.selectForCompare",
+          "when": "view == mageOrchestrator.status && viewItem == generation",
+          "group": "comparison"
         }
       ]
     },
@@ -90,6 +111,10 @@
         {
           "id": "mageOrchestrator.specs",
           "name": "Specifications"
+        },
+        {
+          "id": "mageOrchestrator.comparison",
+          "name": "Comparison"
         }
       ]
     }

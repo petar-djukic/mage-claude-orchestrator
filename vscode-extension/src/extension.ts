@@ -1,8 +1,9 @@
 // Copyright (c) 2026 Petar Djukic. All rights reserved.
 // SPDX-License-Identifier: MIT
 
-// prd: prd006-vscode-extension R1, R7
+// prd: prd006-vscode-extension R1, R3, R5, R7
 // uc: rel02.0-uc001-lifecycle-commands
+// uc: rel02.0-uc003-branch-comparison
 
 import * as vscode from "vscode";
 import * as commands from "./commands";
@@ -10,6 +11,13 @@ import { SpecBrowserProvider } from "./specBrowser";
 import { SpecGraph } from "./specModel";
 import { TraceabilityProvider, viewRequirement } from "./traceability";
 import { GenerationBrowserProvider } from "./generationBrowser";
+import { BeadsStore } from "./beadsModel";
+import { IssueBrowserProvider } from "./issuesBrowser";
+import { MetricsDashboard } from "./dashboard";
+import {
+  ComparisonBrowserProvider,
+  GitRefContentProvider,
+} from "./comparisonBrowser";
 
 /** Output channel for error and diagnostic logging. */
 let outputChannel: vscode.OutputChannel;
@@ -51,15 +59,6 @@ export function activate(context: vscode.ExtensionContext): void {
     )
   );
 
-  // Register placeholder for the dashboard command (existing stub).
-  context.subscriptions.push(
-    vscode.commands.registerCommand("mageOrchestrator.showDashboard", () => {
-      vscode.window.showInformationMessage(
-        "Mage Orchestrator dashboard — not yet implemented."
-      );
-    })
-  );
-
   // FileSystemWatchers for reactive view refresh.
   const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (root) {
@@ -99,6 +98,66 @@ export function activate(context: vscode.ExtensionContext): void {
     gitRefsWatcher.onDidCreate(() => genBrowser.refresh());
     gitRefsWatcher.onDidDelete(() => genBrowser.refresh());
 
+    // Branch and Tag Comparison view (prd006 R3).
+    const comparisonBrowser = new ComparisonBrowserProvider(root);
+    context.subscriptions.push(
+      vscode.window.registerTreeDataProvider(
+        "mageOrchestrator.comparison",
+        comparisonBrowser
+      )
+    );
+    context.subscriptions.push(
+      vscode.workspace.registerTextDocumentContentProvider(
+        "mage-git-ref",
+        new GitRefContentProvider(root)
+      )
+    );
+    context.subscriptions.push(
+      vscode.commands.registerCommand("mageOrchestrator.compareTags", () =>
+        commands.compareTags(outputChannel, comparisonBrowser)
+      ),
+      vscode.commands.registerCommand(
+        "mageOrchestrator.compareGenerations",
+        (genA: string, genB: string) =>
+          commands.compareGenerations(
+            outputChannel,
+            comparisonBrowser,
+            genA,
+            genB
+          )
+      ),
+      vscode.commands.registerCommand(
+        "mageOrchestrator.openComparisonDiff",
+        (node) => commands.openComparisonDiff(node)
+      ),
+      vscode.commands.registerCommand(
+        "mageOrchestrator.selectForCompare",
+        async (item: { generation: { name: string } }) => {
+          // Store first generation; on second selection, trigger comparison.
+          const name = item.generation.name;
+          const stored =
+            context.workspaceState.get<string>("compareGenerationA");
+          if (stored && stored !== name) {
+            await commands.compareGenerations(
+              outputChannel,
+              comparisonBrowser,
+              stored,
+              name
+            );
+            await context.workspaceState.update(
+              "compareGenerationA",
+              undefined
+            );
+          } else {
+            await context.workspaceState.update("compareGenerationA", name);
+            vscode.window.showInformationMessage(
+              `Selected ${name} for comparison. Select a second generation to compare.`
+            );
+          }
+        }
+      )
+    );
+
     // Specification Browser tree view (prd006 R8).
     const specBrowser = new SpecBrowserProvider(root);
     context.subscriptions.push(
@@ -115,6 +174,30 @@ export function activate(context: vscode.ExtensionContext): void {
     specsWatcher.onDidChange(() => specBrowser.refresh());
     specsWatcher.onDidCreate(() => specBrowser.refresh());
     specsWatcher.onDidDelete(() => specBrowser.refresh());
+
+    // Issue tracker tree view (prd006 R4).
+    const beadsStore = new BeadsStore(root);
+    const issueBrowser = new IssueBrowserProvider(beadsStore);
+    context.subscriptions.push(
+      vscode.window.registerTreeDataProvider(
+        "mageOrchestrator.issues",
+        issueBrowser
+      )
+    );
+    beadsWatcher.onDidChange(() => issueBrowser.refresh());
+    beadsWatcher.onDidCreate(() => issueBrowser.refresh());
+    beadsWatcher.onDidDelete(() => issueBrowser.refresh());
+
+    // Metrics dashboard webview (prd006 R5).
+    const dashboard = new MetricsDashboard(beadsStore);
+    context.subscriptions.push(
+      vscode.commands.registerCommand("mageOrchestrator.showDashboard", () =>
+        dashboard.show()
+      )
+    );
+    beadsWatcher.onDidChange(() => dashboard.refresh());
+    beadsWatcher.onDidCreate(() => dashboard.refresh());
+    beadsWatcher.onDidDelete(() => dashboard.refresh());
 
     // Code-to-spec traceability CodeLens (prd006 R9).
     const traceGraph = new SpecGraph(root);
@@ -133,6 +216,15 @@ export function activate(context: vscode.ExtensionContext): void {
     specsWatcher.onDidChange(() => traceGraph.invalidate());
     specsWatcher.onDidCreate(() => traceGraph.invalidate());
     specsWatcher.onDidDelete(() => traceGraph.invalidate());
+  } else {
+    // Fallback when no workspace root is available.
+    context.subscriptions.push(
+      vscode.commands.registerCommand("mageOrchestrator.showDashboard", () => {
+        vscode.window.showWarningMessage(
+          "Metrics dashboard requires an open workspace."
+        );
+      })
+    );
   }
 
   outputChannel.appendLine("Mage Orchestrator extension activated");

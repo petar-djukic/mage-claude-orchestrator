@@ -1,11 +1,19 @@
 // Copyright (c) 2026 Petar Djukic. All rights reserved.
 // SPDX-License-Identifier: MIT
 
-// prd: prd006-vscode-extension R1
+// prd: prd006-vscode-extension R1, R3
 // uc: rel02.0-uc001-lifecycle-commands
+// uc: rel02.0-uc003-branch-comparison
 
 import * as vscode from "vscode";
 import { execSync } from "child_process";
+import {
+  ComparisonBrowserProvider,
+  listVersionTags,
+  computeDiff,
+  resolveGenerationRef,
+  FileNode,
+} from "./comparisonBrowser";
 
 /** Default branch name prefix for generation branches. */
 const GENERATION_PREFIX = "generation-";
@@ -188,4 +196,113 @@ export function cobblerStitch(output: vscode.OutputChannel): void {
   } catch (err) {
     output.appendLine(`cobbler:stitch error: ${err}`);
   }
+}
+
+/**
+ * Shows quick-pick for selecting two version tags and displays
+ * their file-level diff in the comparison tree view. (prd006 R3.1, R3.2)
+ */
+export async function compareTags(
+  output: vscode.OutputChannel,
+  comparisonBrowser: ComparisonBrowserProvider
+): Promise<void> {
+  const root = workspaceRoot();
+  if (!root) {
+    vscode.window.showErrorMessage("No workspace folder open.");
+    return;
+  }
+
+  const tags = listVersionTags(root);
+  if (tags.length === 0) {
+    vscode.window.showInformationMessage(
+      "No version tags found. Tags must match the v[REL].[DATE].[REVISION] pattern."
+    );
+    return;
+  }
+
+  if (tags.length < 2) {
+    vscode.window.showInformationMessage(
+      "At least two version tags are required for comparison."
+    );
+    return;
+  }
+
+  const first = await vscode.window.showQuickPick(tags, {
+    placeHolder: "Select the first tag",
+  });
+  if (!first) {
+    return;
+  }
+
+  const remaining = tags.filter((t) => t !== first);
+  const second = await vscode.window.showQuickPick(remaining, {
+    placeHolder: "Select the second tag",
+  });
+  if (!second) {
+    return;
+  }
+
+  const entries = computeDiff(root, first, second);
+  comparisonBrowser.setComparison(first, second, entries);
+  output.appendLine(`Comparing ${first} .. ${second}: ${entries.length} file(s) changed`);
+}
+
+/**
+ * Compares two generation branches by resolving each to its best
+ * available tag ref. Called from the Generation Browser context menu.
+ * (prd006 R3.5, R2.8)
+ */
+export async function compareGenerations(
+  output: vscode.OutputChannel,
+  comparisonBrowser: ComparisonBrowserProvider,
+  generationA: string,
+  generationB: string
+): Promise<void> {
+  const root = workspaceRoot();
+  if (!root) {
+    vscode.window.showErrorMessage("No workspace folder open.");
+    return;
+  }
+
+  const refA = resolveGenerationRef(root, generationA);
+  if (!refA) {
+    vscode.window.showErrorMessage(
+      `Cannot resolve ref for generation: ${generationA}`
+    );
+    return;
+  }
+
+  const refB = resolveGenerationRef(root, generationB);
+  if (!refB) {
+    vscode.window.showErrorMessage(
+      `Cannot resolve ref for generation: ${generationB}`
+    );
+    return;
+  }
+
+  const entries = computeDiff(root, refA, refB);
+  comparisonBrowser.setComparison(refA, refB, entries);
+  output.appendLine(
+    `Comparing generations ${generationA} (${refA}) .. ${generationB} (${refB}): ${entries.length} file(s) changed`
+  );
+}
+
+/**
+ * Opens a VS Code diff editor for a file between two refs.
+ * Called when a file node in the comparison tree is clicked.
+ * (prd006 R3.4)
+ */
+export async function openComparisonDiff(node: FileNode): Promise<void> {
+  const filePath = node.entry.newPath ?? node.entry.path;
+  const leftUri = gitRefUri(node.refA, node.entry.path);
+  const rightUri = gitRefUri(node.refB, filePath);
+  const title = `${filePath} (${node.refA} ↔ ${node.refB})`;
+  await vscode.commands.executeCommand("vscode.diff", leftUri, rightUri, title);
+}
+
+/** Encodes a git ref and file path into a mage-git-ref: URI. */
+function gitRefUri(ref: string, filePath: string): vscode.Uri {
+  return vscode.Uri.parse(
+    `mage-git-ref:${filePath}?${encodeURIComponent(JSON.stringify({ ref, path: filePath }))}`
+  );
 }

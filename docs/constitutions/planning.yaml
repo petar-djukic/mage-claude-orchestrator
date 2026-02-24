@@ -19,9 +19,19 @@ articles:
       Code tasks should target the line range specified in the CONSTRAINTS
       section of the prompt (typically 250-350 lines of production code),
       touching no more than 5-7 files. Split larger features into multiple
-      tasks. Combine trivial changes into one task. Prefer splitting
-      implementation and tests into separate tasks. This keeps tasks
-      completable within the Claude timeout while making meaningful progress.
+      tasks. Combine trivial changes into one task.
+
+      Always split implementation and tests into separate tasks. Decompose
+      each feature into up to three tasks in this order: (1) types and
+      interfaces, (2) implementation, (3) tests. A single task must never
+      both implement and test the same feature. If the types and interfaces
+      are small enough to fit within the implementation task's line budget,
+      combine steps 1 and 2 into one task.
+
+      Each task must be completable within the Claude timeout (typically
+      5-10 minutes). If a task would require more than 20 agent turns, it
+      is too large and must be split further. Treat timeout as a signal
+      that the task needs decomposition, not retrying.
 
   - id: P3
     title: Task limit per batch
@@ -43,6 +53,54 @@ articles:
       Identify what should be built first and why. PRDs before use cases,
       use cases before test suites, test suites before code, foundational code
       before features, libraries before CLI.
+
+  - id: P6
+    title: Requirement-anchored decomposition
+    rule: |
+      Anchor each task to specific PRD requirements by ID (e.g., prd001 R1.1,
+      prd002 R2.3). Include the requirement ID(s) in the task title. Each PRD
+      requirement maps to exactly one task unless the requirement exceeds the
+      line budget, in which case split into implementation and test tasks that
+      both reference the same requirement. Do not invent task boundaries that
+      cross requirement boundaries. This makes decomposition deterministic:
+      given the same PRD and release, the same set of tasks should be proposed.
+
+  - id: P7
+    title: File naming conventions
+    rule: |
+      Derive file names from the module or feature name established in the
+      PRD or architecture document. Use the existing project naming pattern
+      (snake_case for Go files, kebab-case for YAML documents). When creating
+      a new package, use the name from ARCHITECTURE.yaml. Do not invent novel
+      file names. If the PRD names a component "crumb", the file is crumb.go,
+      not item.go or entity.go. Go packages must name the primary source file
+      after the primary exported type, not the package name.
+      `testutils/testutils.go` is forbidden; if the primary type is
+      `DiffTest`, the file is `difftest.go`. Test files mirror source:
+      `difftest_test.go`.
+
+  - id: P8
+    title: Deterministic ordering
+    rule: |
+      Propose tasks in a fixed canonical order. Within the same release:
+      1. Documentation tasks before code tasks.
+      2. Types and interfaces before implementations.
+      3. Libraries and shared packages before consumers.
+      4. Implementation before tests (when split into separate tasks).
+      When two tasks have equal priority under these rules, order by the
+      primary file path alphabetically. This ensures the same input produces
+      the same task sequence.
+
+  - id: P9
+    title: Requirement granularity
+    rule: |
+      Code tasks target 5-8 requirements, 5-8 acceptance criteria, and 3-5
+      design decisions. Documentation tasks target 2-4 requirements and 3-5
+      acceptance criteria. Each PRD requirement maps to exactly one task
+      requirement. Do not inflate counts by splitting a single requirement
+      into sub-bullets, and do not deflate counts by merging unrelated
+      requirements. If a task falls outside these ranges, re-examine the
+      decomposition.
 
 issue_structure:
   common_fields:
@@ -68,18 +126,21 @@ issue_structure:
     requirements:
       required: true
       description: |
-        What needs to be built or written. Be specific and actionable.
+        What needs to be built or written. Each item is a mapping with
+        `id` (R1, R2, ...) and `text` fields. Be specific and actionable.
 
     design_decisions:
       required: false
       description: |
-        Architecture, patterns, or constraints to follow. Optional but
+        Architecture, patterns, or constraints to follow. Each item is a
+        mapping with `id` (D1, D2, ...) and `text` fields. Optional but
         recommended for code tasks.
 
     acceptance_criteria:
       required: true
       description: |
-        Checkable outcomes. Must be verifiable without ambiguity.
+        Checkable outcomes. Each item is a mapping with `id` (AC1, AC2, ...)
+        and `text` fields. Must be verifiable without ambiguity.
 
   documentation_issues:
     additional_fields:
@@ -128,6 +189,10 @@ issue_structure:
         format_rule: specification-format
         when: Summary of PRDs, use cases, test suites, roadmap
 
+  yaml_quality:
+    - Use ASCII dashes (--), not Unicode em dashes or en dashes.
+    - Requirements, design decisions, and acceptance criteria are all mappings with id and text fields.
+
   code_issues:
     rules:
       - No PRD-style Problem/Goals/Non-Goals sections in code issues
@@ -155,9 +220,12 @@ example_documentation_issue: |
     - "Acceptance Criteria: checkable outcomes"
 
   acceptance_criteria:
-    - All required sections present
-    - File saved as prd-feature-name.yaml
-    - Requirements numbered and specific
+    - id: AC1
+      text: All required sections present
+    - id: AC2
+      text: File saved as prd-feature-name.yaml
+    - id: AC3
+      text: Requirements numbered and specific
 
 example_code_issue: |
   deliverable_type: code
@@ -178,15 +246,23 @@ example_code_issue: |
       note: tests
 
   requirements:
-    - Implement CrumbTable interface per prd003-crumbs-interface
-    - Add, Get, Archive, Purge, Fetch operations
-    - Property operations (Set/Get/Clear)
+    - id: R1
+      text: Implement CrumbTable interface per prd003-crumbs-interface
+    - id: R2
+      text: Add, Get, Archive, Purge, Fetch operations
+    - id: R3
+      text: Property operations (Set/Get/Clear)
 
   design_decisions:
-    - Use table accessor pattern from prd001-cupboard-core
-    - Filter as map[string]any per PRD
+    - id: D1
+      text: Use table accessor pattern from prd001-cupboard-core
+    - id: D2
+      text: Filter as map[string]any per PRD
 
   acceptance_criteria:
-    - All CrumbTable operations implemented
-    - Tests pass for each operation
-    - Errors match PRD error types
+    - id: AC1
+      text: All CrumbTable operations implemented
+    - id: AC2
+      text: Tests pass for each operation
+    - id: AC3
+      text: Errors match PRD error types

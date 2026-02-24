@@ -299,6 +299,15 @@ func bdShowJSON(id string) ([]byte, error) {
 	return exec.Command(binBd, "show", "--json", id).Output()
 }
 
+// FileChange holds per-file diff information from git diff --name-status
+// combined with insertion/deletion counts from git diff --numstat.
+type FileChange struct {
+	Path       string `yaml:"path"`
+	Status     string `yaml:"status"`
+	Insertions int    `yaml:"insertions"`
+	Deletions  int    `yaml:"deletions"`
+}
+
 // diffStat holds parsed output from git diff --shortstat.
 type diffStat struct {
 	FilesChanged int
@@ -332,6 +341,84 @@ func parseDiffShortstat(s string) diffStat {
 		}
 	}
 	return ds
+}
+
+// gitDiffNameStatus runs git diff --name-status and --numstat against the
+// given ref and returns per-file entries with path, status, insertions, and
+// deletions. The two commands are combined to produce complete file-level
+// change records.
+func gitDiffNameStatus(ref string) ([]FileChange, error) {
+	nsOut, err := exec.Command(binGit, "diff", "--name-status", ref).Output()
+	if err != nil {
+		return nil, err
+	}
+
+	numOut, _ := exec.Command(binGit, "diff", "--numstat", ref).Output()
+	numMap := parseNumstat(string(numOut))
+
+	return parseNameStatus(string(nsOut), numMap), nil
+}
+
+// parseNameStatus parses git diff --name-status output and merges it with
+// numstat data to produce FileChange entries.
+func parseNameStatus(output string, numMap map[string]numstatEntry) []FileChange {
+	var files []FileChange
+	for line := range strings.SplitSeq(strings.TrimSpace(output), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, "\t")
+		if len(parts) < 2 {
+			continue
+		}
+		status := parts[0]
+		path := parts[1]
+
+		// Renames show as R### with old\tnew paths.
+		if strings.HasPrefix(status, "R") && len(parts) >= 3 {
+			path = parts[2]
+			status = "R"
+		}
+		// Copies show as C### with old\tnew paths.
+		if strings.HasPrefix(status, "C") && len(parts) >= 3 {
+			path = parts[2]
+			status = "C"
+		}
+
+		fc := FileChange{Path: path, Status: status}
+		if ns, ok := numMap[path]; ok {
+			fc.Insertions = ns.ins
+			fc.Deletions = ns.del
+		}
+		files = append(files, fc)
+	}
+	return files
+}
+
+type numstatEntry struct {
+	ins int
+	del int
+}
+
+// parseNumstat parses git diff --numstat output into a map keyed by file path.
+// Binary files show "-\t-\tpath" and are recorded with zero counts.
+func parseNumstat(output string) map[string]numstatEntry {
+	m := make(map[string]numstatEntry)
+	for line := range strings.SplitSeq(strings.TrimSpace(output), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, "\t")
+		if len(parts) < 3 {
+			continue
+		}
+		// Binary files use "-" for insertions and deletions.
+		ins, _ := strconv.Atoi(parts[0])
+		del, _ := strconv.Atoi(parts[1])
+		path := parts[len(parts)-1]
+		m[path] = numstatEntry{ins: ins, del: del}
+	}
+	return m
 }
 
 // Podman helpers.

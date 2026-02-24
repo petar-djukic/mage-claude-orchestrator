@@ -105,6 +105,47 @@ type historyDiff struct {
 	Deletions  int `yaml:"deletions"`
 }
 
+// StitchReport is the YAML-serializable report file saved alongside stats
+// and log artifacts after a successful stitch. It includes per-file diffstat
+// so that downstream consumers can see exactly what changed.
+type StitchReport struct {
+	TaskID    string       `yaml:"task_id"`
+	TaskTitle string       `yaml:"task_title"`
+	Status    string       `yaml:"status"`
+	Branch    string       `yaml:"branch"`
+	Diff      historyDiff  `yaml:"diff"`
+	Files     []FileChange `yaml:"files"`
+	LOCBefore LocSnapshot  `yaml:"loc_before"`
+	LOCAfter  LocSnapshot  `yaml:"loc_after"`
+}
+
+// saveHistoryReport writes a stitch report YAML file to the history directory.
+// The file is named {ts}-stitch-report.yaml. When HistoryDir is empty the
+// call is a no-op, consistent with the other save functions.
+func (o *Orchestrator) saveHistoryReport(ts string, report StitchReport) {
+	dir := o.cfg.Cobbler.HistoryDir
+	if dir == "" {
+		return
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		logf("saveHistoryReport: mkdir %s: %v", dir, err)
+		return
+	}
+
+	data, err := yaml.Marshal(&report)
+	if err != nil {
+		logf("saveHistoryReport: marshal: %v", err)
+		return
+	}
+
+	path := filepath.Join(dir, ts+"-stitch-report.yaml")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		logf("saveHistoryReport: write %s: %v", path, err)
+		return
+	}
+	logf("saveHistoryReport: saved %s", path)
+}
+
 // saveHistoryStats writes a stats YAML file to the history directory.
 // The file is named {ts}-{phase}-stats.yaml.
 func (o *Orchestrator) saveHistoryStats(ts, phase string, stats HistoryStats) {

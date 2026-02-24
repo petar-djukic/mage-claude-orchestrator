@@ -411,6 +411,97 @@ type NamedDoc struct {
 }
 
 // ---------------------------------------------------------------------------
+// Source file filtering (selective stitch context, eng05 rec D)
+// ---------------------------------------------------------------------------
+
+// stripParenthetical removes a trailing parenthetical note from a path.
+// "pkg/types/cupboard.go (CrumbTable interface)" becomes "pkg/types/cupboard.go".
+func stripParenthetical(s string) string {
+	s = strings.TrimSpace(s)
+	if idx := strings.LastIndex(s, "("); idx > 0 {
+		return strings.TrimSpace(s[:idx])
+	}
+	return s
+}
+
+// sourceFileMatchesAny returns true if the source file's path ends with
+// any of the given suffixes. Used by both filterSourceFiles and
+// applyContextBudget for consistent suffix matching.
+func sourceFileMatchesAny(sf SourceFile, suffixes []string) bool {
+	for _, s := range suffixes {
+		if strings.HasSuffix(sf.File, s) {
+			return true
+		}
+	}
+	return false
+}
+
+// filterSourceFiles returns only the source files whose paths match any of
+// the requiredPaths using suffix matching. A required path matches if any
+// SourceFile.File ends with it. If requiredPaths is empty, all source files
+// are returned (backward-compatible fallback).
+func filterSourceFiles(sources []SourceFile, requiredPaths []string) []SourceFile {
+	if len(requiredPaths) == 0 {
+		return sources
+	}
+
+	var filtered []SourceFile
+	for _, src := range sources {
+		if sourceFileMatchesAny(src, requiredPaths) {
+			filtered = append(filtered, src)
+		}
+	}
+	return filtered
+}
+
+// applyContextBudget measures the YAML-serialized size of ctx and, if it
+// exceeds budget, progressively removes SourceCode entries not in
+// requiredPaths until within budget. Files are removed in reverse order
+// (last loaded first) to preserve files closer to the top of the directory
+// tree. When budget is 0 or negative, this function is a no-op.
+func applyContextBudget(ctx *ProjectContext, budget int, requiredPaths []string) {
+	if budget <= 0 || ctx == nil {
+		return
+	}
+
+	data, err := yaml.Marshal(ctx)
+	if err != nil {
+		logf("applyContextBudget: marshal error: %v", err)
+		return
+	}
+	before := len(data)
+	if before <= budget {
+		logf("applyContextBudget: context size %d <= budget %d, no truncation needed", before, budget)
+		return
+	}
+
+	removed := 0
+	for len(ctx.SourceCode) > 0 && len(data) > budget {
+		// Find the last non-required source file.
+		idx := -1
+		for i := len(ctx.SourceCode) - 1; i >= 0; i-- {
+			if !sourceFileMatchesAny(ctx.SourceCode[i], requiredPaths) {
+				idx = i
+				break
+			}
+		}
+		if idx < 0 {
+			break // all remaining files are required
+		}
+		ctx.SourceCode = append(ctx.SourceCode[:idx], ctx.SourceCode[idx+1:]...)
+		removed++
+
+		data, err = yaml.Marshal(ctx)
+		if err != nil {
+			logf("applyContextBudget: re-marshal error: %v", err)
+			return
+		}
+	}
+
+	logf("applyContextBudget: context size %d -> %d, removed %d source file(s)", before, len(data), removed)
+}
+
+// ---------------------------------------------------------------------------
 // Helper functions
 // ---------------------------------------------------------------------------
 

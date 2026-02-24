@@ -455,6 +455,252 @@ func TestContextIncludeWithExclude(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// filterSourceFiles tests
+// ---------------------------------------------------------------------------
+
+func TestFilterSourceFiles_ExactMatch(t *testing.T) {
+	sources := []SourceFile{
+		{File: "pkg/orchestrator/stitch.go", Lines: "1 | package orchestrator"},
+		{File: "pkg/orchestrator/context.go", Lines: "1 | package orchestrator"},
+		{File: "pkg/orchestrator/config.go", Lines: "1 | package orchestrator"},
+	}
+	required := []string{"pkg/orchestrator/stitch.go", "pkg/orchestrator/context.go"}
+
+	got := filterSourceFiles(sources, required)
+	if len(got) != 2 {
+		t.Fatalf("filterSourceFiles: got %d files, want 2", len(got))
+	}
+	if got[0].File != "pkg/orchestrator/stitch.go" {
+		t.Errorf("got[0].File = %q, want stitch.go", got[0].File)
+	}
+	if got[1].File != "pkg/orchestrator/context.go" {
+		t.Errorf("got[1].File = %q, want context.go", got[1].File)
+	}
+}
+
+func TestFilterSourceFiles_SuffixMatch(t *testing.T) {
+	sources := []SourceFile{
+		{File: "/tmp/worktree/pkg/bar/foo.go", Lines: "1 | package bar"},
+		{File: "/tmp/worktree/pkg/baz/other.go", Lines: "1 | package baz"},
+	}
+	required := []string{"pkg/bar/foo.go"}
+
+	got := filterSourceFiles(sources, required)
+	if len(got) != 1 {
+		t.Fatalf("filterSourceFiles suffix: got %d files, want 1", len(got))
+	}
+	if got[0].File != "/tmp/worktree/pkg/bar/foo.go" {
+		t.Errorf("got[0].File = %q, want foo.go path", got[0].File)
+	}
+}
+
+func TestFilterSourceFiles_EmptyRequired(t *testing.T) {
+	sources := []SourceFile{
+		{File: "pkg/a.go"},
+		{File: "pkg/b.go"},
+		{File: "pkg/c.go"},
+	}
+
+	got := filterSourceFiles(sources, nil)
+	if len(got) != 3 {
+		t.Errorf("filterSourceFiles empty required: got %d, want 3 (all files)", len(got))
+	}
+
+	got2 := filterSourceFiles(sources, []string{})
+	if len(got2) != 3 {
+		t.Errorf("filterSourceFiles empty slice: got %d, want 3", len(got2))
+	}
+}
+
+func TestFilterSourceFiles_NoMatch(t *testing.T) {
+	sources := []SourceFile{
+		{File: "pkg/a.go"},
+		{File: "pkg/b.go"},
+	}
+	required := []string{"pkg/nonexistent.go"}
+
+	got := filterSourceFiles(sources, required)
+	if len(got) != 0 {
+		t.Errorf("filterSourceFiles no match: got %d, want 0", len(got))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// stripParenthetical tests
+// ---------------------------------------------------------------------------
+
+func TestStripParenthetical(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"pkg/types/cupboard.go (CrumbTable interface)", "pkg/types/cupboard.go"},
+		{"pkg/orchestrator/stitch.go (buildStitchPrompt, stitchTask)", "pkg/orchestrator/stitch.go"},
+		{"docs/engineering/eng05.md (recommendation D)", "docs/engineering/eng05.md"},
+		{"pkg/plain.go", "pkg/plain.go"},
+		{"", ""},
+		{"  pkg/spaced.go  ", "pkg/spaced.go"},
+	}
+
+	for _, tt := range tests {
+		got := stripParenthetical(tt.input)
+		if got != tt.want {
+			t.Errorf("stripParenthetical(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// parseRequiredReading tests
+// ---------------------------------------------------------------------------
+
+func TestParseRequiredReading(t *testing.T) {
+	desc := `deliverable_type: code
+required_reading:
+  - pkg/orchestrator/stitch.go (buildStitchPrompt)
+  - pkg/orchestrator/context.go (buildProjectContext)
+  - docs/engineering/eng05.md (recommendation D)
+files:
+  - path: pkg/orchestrator/stitch.go
+    action: modify
+`
+	got := parseRequiredReading(desc)
+	if len(got) != 3 {
+		t.Fatalf("parseRequiredReading: got %d entries, want 3", len(got))
+	}
+	if got[0] != "pkg/orchestrator/stitch.go (buildStitchPrompt)" {
+		t.Errorf("got[0] = %q", got[0])
+	}
+}
+
+func TestParseRequiredReading_Empty(t *testing.T) {
+	got := parseRequiredReading("")
+	if got != nil {
+		t.Errorf("parseRequiredReading empty: got %v, want nil", got)
+	}
+}
+
+func TestParseRequiredReading_NoField(t *testing.T) {
+	desc := "deliverable_type: code\nfiles: []\n"
+	got := parseRequiredReading(desc)
+	if len(got) != 0 {
+		t.Errorf("parseRequiredReading no field: got %d, want 0", len(got))
+	}
+}
+
+func TestParseRequiredReading_InvalidYAML(t *testing.T) {
+	got := parseRequiredReading("not: [valid: yaml: {")
+	if got != nil {
+		t.Errorf("parseRequiredReading invalid: got %v, want nil", got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// applyContextBudget tests
+// ---------------------------------------------------------------------------
+
+func TestApplyContextBudget_RemovesNonRequired(t *testing.T) {
+	ctx := &ProjectContext{
+		SourceCode: []SourceFile{
+			{File: "pkg/a.go", Lines: strings.Repeat("x", 1000)},
+			{File: "pkg/b.go", Lines: strings.Repeat("y", 1000)},
+			{File: "pkg/c.go", Lines: strings.Repeat("z", 1000)},
+		},
+	}
+	required := []string{"pkg/a.go"}
+
+	// Set a budget smaller than the full context but large enough for one file.
+	data, _ := yaml.Marshal(ctx)
+	fullSize := len(data)
+	budget := fullSize / 2
+
+	applyContextBudget(ctx, budget, required)
+
+	// a.go must be preserved (it's required).
+	found := false
+	for _, sf := range ctx.SourceCode {
+		if sf.File == "pkg/a.go" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("required file pkg/a.go was removed by budget enforcement")
+	}
+
+	// At least one non-required file should have been removed.
+	if len(ctx.SourceCode) >= 3 {
+		t.Errorf("expected some files to be removed, still have %d", len(ctx.SourceCode))
+	}
+}
+
+func TestApplyContextBudget_ZeroBudget(t *testing.T) {
+	ctx := &ProjectContext{
+		SourceCode: []SourceFile{
+			{File: "pkg/a.go", Lines: "package a"},
+			{File: "pkg/b.go", Lines: "package b"},
+		},
+	}
+
+	applyContextBudget(ctx, 0, nil)
+
+	if len(ctx.SourceCode) != 2 {
+		t.Errorf("zero budget should not remove files, got %d", len(ctx.SourceCode))
+	}
+}
+
+func TestApplyContextBudget_PreservesRequired(t *testing.T) {
+	// All files are required — none should be removed even if over budget.
+	ctx := &ProjectContext{
+		SourceCode: []SourceFile{
+			{File: "pkg/a.go", Lines: strings.Repeat("x", 5000)},
+			{File: "pkg/b.go", Lines: strings.Repeat("y", 5000)},
+		},
+	}
+	required := []string{"pkg/a.go", "pkg/b.go"}
+
+	applyContextBudget(ctx, 1, required) // impossibly small budget
+
+	if len(ctx.SourceCode) != 2 {
+		t.Errorf("all-required: expected 2 files preserved, got %d", len(ctx.SourceCode))
+	}
+}
+
+func TestApplyContextBudget_UnderBudget(t *testing.T) {
+	ctx := &ProjectContext{
+		SourceCode: []SourceFile{
+			{File: "pkg/a.go", Lines: "package a"},
+		},
+	}
+
+	applyContextBudget(ctx, 1000000, nil)
+
+	if len(ctx.SourceCode) != 1 {
+		t.Errorf("under budget should not remove files, got %d", len(ctx.SourceCode))
+	}
+}
+
+func TestApplyContextBudget_ExactlyAtLimit(t *testing.T) {
+	ctx := &ProjectContext{
+		SourceCode: []SourceFile{
+			{File: "pkg/a.go", Lines: "package a"},
+		},
+	}
+	data, _ := yaml.Marshal(ctx)
+	exactSize := len(data)
+
+	applyContextBudget(ctx, exactSize, nil)
+
+	if len(ctx.SourceCode) != 1 {
+		t.Errorf("at-limit: expected 1 file, got %d", len(ctx.SourceCode))
+	}
+}
+
+func TestApplyContextBudget_NilContext(t *testing.T) {
+	// Should not panic.
+	applyContextBudget(nil, 100, nil)
+}
+
 func TestContextExcludeEverything(t *testing.T) {
 	_, cleanup := setupContextTestDir(t)
 	defer cleanup()

@@ -331,6 +331,22 @@ func pickTask(baseBranch, worktreeBase string) (stitchTask, error) {
 	return task, nil
 }
 
+// parseRequiredReading extracts the required_reading list from a YAML task
+// description. Returns nil if the field is absent or unparseable.
+func parseRequiredReading(description string) []string {
+	if description == "" {
+		return nil
+	}
+	var parsed struct {
+		RequiredReading []string `yaml:"required_reading"`
+	}
+	if err := yaml.Unmarshal([]byte(description), &parsed); err != nil {
+		logf("parseRequiredReading: YAML parse error: %v", err)
+		return nil
+	}
+	return parsed.RequiredReading
+}
+
 // validateIssueDescription checks that a description parses as valid YAML
 // and contains the required top-level keys defined by the issue-format
 // constitution. Returns an error describing what is missing; callers
@@ -466,9 +482,11 @@ func (o *Orchestrator) doOneTask(task stitchTask, baseBranch, repoRoot string) e
 	}
 	logf("doOneTask: merge completed in %s", time.Since(mergeStart).Round(time.Second))
 
-	// Capture LOC diff and post-merge LOC.
+	// Capture LOC diff, per-file diff, and post-merge LOC.
 	diff, _ := gitDiffShortstat(preMergeRef)
 	logf("doOneTask: diff files=%d ins=%d del=%d", diff.FilesChanged, diff.Insertions, diff.Deletions)
+	fileChanges, _ := gitDiffNameStatus(preMergeRef)
+	logf("doOneTask: fileChanges=%d entries", len(fileChanges))
 	locAfter := o.captureLOC()
 	logf("doOneTask: locAfter prod=%d test=%d", locAfter.Production, locAfter.Test)
 
@@ -491,6 +509,18 @@ func (o *Orchestrator) doOneTask(task stitchTask, baseBranch, repoRoot string) e
 		LOCBefore: locBefore,
 		LOCAfter:  locAfter,
 		Diff:      historyDiff{Files: diff.FilesChanged, Insertions: diff.Insertions, Deletions: diff.Deletions},
+	})
+
+	// Save stitch report with per-file diffstat.
+	o.saveHistoryReport(historyTS, StitchReport{
+		TaskID:    task.id,
+		TaskTitle: task.title,
+		Status:    "success",
+		Branch:    task.branchName,
+		Diff:      historyDiff{Files: diff.FilesChanged, Insertions: diff.Insertions, Deletions: diff.Deletions},
+		Files:     fileChanges,
+		LOCBefore: locBefore,
+		LOCAfter:  locAfter,
 	})
 
 	// Close task with metrics.
@@ -571,6 +601,33 @@ func (o *Orchestrator) buildStitchPrompt(task stitchTask) (string, error) {
 		}
 	}
 	logf("buildStitchPrompt: projectCtx=%v", projectCtx != nil)
+
+	// Selective stitch context (eng05 rec D): filter source files to only
+	// those listed in the task's required_reading. Documentation files are
+	// not filtered; only SourceCode is filtered.
+	if projectCtx != nil {
+		requiredReading := parseRequiredReading(task.description)
+		var sourcePaths []string
+		for _, entry := range requiredReading {
+			clean := stripParenthetical(entry)
+			if strings.HasSuffix(clean, ".go") {
+				sourcePaths = append(sourcePaths, clean)
+			}
+		}
+		if len(sourcePaths) > 0 {
+			before := len(projectCtx.SourceCode)
+			projectCtx.SourceCode = filterSourceFiles(projectCtx.SourceCode, sourcePaths)
+			logf("buildStitchPrompt: filtered source files %d -> %d (required_reading has %d source paths)",
+				before, len(projectCtx.SourceCode), len(sourcePaths))
+		} else {
+			logf("buildStitchPrompt: no source paths in required_reading, keeping all %d source files",
+				len(projectCtx.SourceCode))
+		}
+
+		// Context budget enforcement: truncate non-required source files
+		// when the serialized context exceeds MaxContextBytes.
+		applyContextBudget(projectCtx, o.cfg.Cobbler.MaxContextBytes, sourcePaths)
+	}
 
 	taskContext := fmt.Sprintf("Task ID: %s\nType: %s\nTitle: %s",
 		task.id, task.issueType, task.title)

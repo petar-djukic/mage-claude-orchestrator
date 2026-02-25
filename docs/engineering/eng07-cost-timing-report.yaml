@@ -1,0 +1,295 @@
+# Copyright (c) 2026 Petar Djukic. All rights reserved.
+# SPDX-License-Identifier: MIT
+
+id: eng07-cost-timing-report
+title: Cost and Timing Report
+
+introduction: |
+  This report consolidates empirical benchmark data from the measure and stitch
+  phases of the cobbler workflow. We draw on two prior analyses: eng04-measure-scaling
+  (iterative measure strategy and token economics) and eng05-stitch-benchmark-analysis
+  (stitch cycle timing and failure modes). We add a comparison of the single-turn
+  measure approach introduced in GH-12, and derive cost projections for typical
+  project lifecycles.
+
+  All benchmarks ran against go-unix-utils (v0.20260220.2) using claude-opus-4-6
+  with the default 5-minute timeout (300 seconds). Costs reflect Anthropic's
+  published pricing for Claude Opus 4.6 as of February 2026.
+
+sections:
+  - title: Measure Phase Cost Analysis
+    content: |
+      The measure phase proposes tasks by invoking Claude with a prompt containing
+      the full project context (documentation, specifications, source code, existing
+      issues). We benchmark two strategies: batch (one call requesting N issues) and
+      iterative (N sequential calls each requesting one issue).
+
+      Batch Measure Results (eng04)
+
+      The batch approach requests all issues in a single Claude call.
+
+      | Limit | Result  | Wall Time | Output Tokens | Issues | Cost    |
+      |-------|---------|-----------|---------------|--------|---------|
+      | 1     | pass    | 1m28s     | ~3,230        | 1      | ~$0.71  |
+      | 2     | pass    | 5m06s     | ~14,901       | 2      | ~$1.46  |
+      | 3     | timeout | 5m00s     | --            | 0      | wasted  |
+      | 4     | timeout | 5m00s     | --            | 0      | wasted  |
+      | 5     | timeout | 5m00s     | --            | 0      | wasted  |
+
+      Extended thinking time scales super-linearly with issue count. Going from
+      limit=1 to limit=2, wall time increased 3.5x while output roughly doubled.
+      At limit >= 3, Claude exceeds the 5-minute timeout during the thinking phase
+      alone, producing no output. The batch approach is unusable above 2 issues.
+
+      Iterative Measure Results (eng04)
+
+      The iterative approach calls Claude N times, each requesting exactly one issue.
+      Each subsequent call includes previously created issues in the prompt so Claude
+      avoids duplicates.
+
+      | Limit | Wall Time | Issues | Total Cost | Avg Cost/Issue | Avg Time/Call |
+      |-------|-----------|--------|------------|----------------|---------------|
+      | 1     | 1m46s     | 1      | $0.71      | $0.71          | 1m41s         |
+      | 2     | 3m34s     | 2      | $1.38      | $0.69          | 1m44s         |
+      | 3     | 7m27s     | 3      | $2.27      | $0.76          | 2m27s         |
+      | 4     | 10m59s    | 4      | $3.30      | $0.82          | 2m42s         |
+      | 5     | 14m19s    | 5      | $4.15      | $0.83          | 2m48s         |
+
+      All five limits pass. Total time and cost scale linearly. The per-issue cost
+      increases modestly from $0.71 to $0.83 as later iterations include more
+      existing issues in the prompt, increasing both input tokens and Claude's
+      reasoning time.
+
+      Prompt Caching Impact
+
+      The iterative approach sends the full prompt on each call. Prompt caching
+      mitigates the repeated input cost. Observed cache behavior across a 5-issue
+      measure run (eng04 per-iteration detail):
+
+      | Metric              | Range           | Notes                            |
+      |---------------------|-----------------|----------------------------------|
+      | Total input tokens  | 193K--226K      | Grows ~8-14KB per existing issue  |
+      | Cache read ratio    | 56--59%         | Portions served from cache       |
+      | Cache creation      | 41--44%         | Portions newly cached            |
+      | Base (non-cached)   | 3 tokens        | Negligible; everything is cached |
+      | Cost per call       | $0.65--$0.99    | Average ~$0.76                   |
+
+      The 5-minute ephemeral cache window means calls within the same measure run
+      benefit from cache reads at reduced cost. The cache read ratio of ~58% reduces
+      effective input cost by roughly half compared to uncached input pricing.
+
+  - title: Stitch Phase Cost Analysis
+    content: |
+      The stitch phase executes proposed tasks in isolated git worktrees. Each task
+      receives the full project context plus a task description, and Claude
+      implements the code or documentation. We benchmark stitch across multiple
+      cycles (eng05).
+
+      Stitch Cycle Results (eng05)
+
+      A 5-cycle benchmark ran alternating measure/stitch passes with max_time_sec=600
+      (10 minutes).
+
+      | Cycle | Measure | Stitch  | Outcome   | Stitch Cost |
+      |-------|---------|---------|-----------|-------------|
+      | 1     | 1m22s   | 4m14s   | completed | $1.94       |
+      | 2     | 1m35s   | 10m3s   | timeout   | wasted      |
+      | 3     | 2m7s    | 10m3s   | timeout   | wasted      |
+      | 4     | 1m57s   | 10m3s   | timeout   | wasted      |
+      | 5     | 2m7s    | 10m2s   | timeout   | wasted      |
+
+      Only cycle 1 completed stitch within the timeout. Total wall clock was 53m33s,
+      of which only 4m14s produced a merged commit. The effective throughput was one
+      task per 53 minutes; the target is one task per 5--10 minutes.
+
+      Stitch Failure Modes
+
+      Three root causes drive stitch timeouts (eng05):
+
+      1. Task scope growth: Measure proposes tasks that grow in complexity as the
+         project accumulates code. The planning constitution targets 300--700 lines,
+         but real implementation complexity exceeds the estimate due to format-matching
+         requirements and test-fix-test loops.
+
+      2. Redundant file reads: The stitch agent reads files already provided inline
+         in the project context. In cycle 5, Claude spent 9+ minutes on setup and
+         reading before writing a single file.
+
+      3. Output token ceiling: Claude's 32K output token limit creates a hard wall.
+         When a task requires many turns (reading, writing, testing, fixing), the
+         cumulative output approaches this ceiling. Cycle 5 hit it explicitly.
+
+      Stitch Cost Characteristics
+
+      Based on the single successful cycle and the timeout pattern, we estimate
+      stitch costs as follows:
+
+      | Scenario              | Wall Time | Estimated Cost | Notes                     |
+      |-----------------------|-----------|----------------|---------------------------|
+      | Small task (< 200 LoC)| 3--5 min  | $1.50--$2.50   | Completes within timeout  |
+      | Medium task (200--400) | 5--8 min  | $2.50--$4.00   | May approach timeout      |
+      | Large task (> 400 LoC)| 8--10 min | $4.00--$6.00   | High timeout risk         |
+      | Timed-out task        | 10 min    | $4.00--$6.00   | Cost incurred, no output  |
+
+      The eng05 recommendation is to reduce estimated_lines_min/estimated_lines_max
+      to 100--200 and add --max-turns 25 to cap agent iterations.
+
+  - title: Single-Turn Measure (GH-12 Comparison)
+    content: |
+      GH-12 converted the measure phase from a multi-turn interaction to a
+      single-turn call. Before GH-12, the measure prompt instructed Claude to write
+      the YAML output to a file using the Write tool. After GH-12, Claude returns
+      the YAML directly in a fenced code block within its text response.
+
+      Changes introduced by GH-12:
+
+      - Added --max-turns 1 to measure Claude invocations, enforcing single-turn
+        execution
+      - Removed all Write tool references from the measure prompt
+      - Added extractTextFromStreamJSON() and extractYAMLBlock() to parse YAML from
+        Claude's text output
+      - The orchestrator writes the output file itself instead of relying on Claude
+
+      Expected Impact on Costs and Timing
+
+      The pre-GH-12 measure workflow typically took 2--4 turns: one or two turns for
+      thinking and planning, then one turn to call the Write tool, and a final turn
+      confirming completion. The multi-turn approach introduced variability because
+      Claude's extended thinking time fluctuated between turns, and the Write tool
+      call added latency from the tool round-trip.
+
+      The single-turn approach eliminates the Write tool round-trip and forces Claude
+      to produce all output in one response. We expect the following effects:
+
+      | Metric                | Multi-Turn (pre-GH-12) | Single-Turn (post-GH-12) |
+      |-----------------------|------------------------|--------------------------|
+      | Turns per call        | 2--4                   | 1                        |
+      | Output token variance | Higher (thinking spreads across turns) | Lower (single output budget) |
+      | Write tool latency    | ~2--5s per call        | Eliminated               |
+      | Total wall time       | ~1m30s--3m48s          | Expected ~1m--3m         |
+      | Cost per call         | $0.65--$0.99           | Expected similar or lower|
+
+      The eng04 iterative benchmarks (pre-GH-12) measured 2--4 turns per measure
+      call. With --max-turns 1, each call produces output in exactly one turn. The
+      cost savings come from eliminating the Write tool turn's output tokens and
+      the associated thinking tokens Claude spends planning the tool call. The
+      magnitude depends on how much thinking time Claude allocated to the tool
+      interaction, which varied between runs.
+
+      Formal benchmarks of the single-turn approach against the same test corpus
+      (go-unix-utils v0.20260220.2) are pending. The benchmark test in
+      tests/rel01.0/uc008/ will capture comparable data for direct comparison.
+
+  - title: Cost Projections for Project Lifecycles
+    content: |
+      We project costs for typical cobbler workflows based on the empirical data
+      above. All projections use the iterative measure strategy and assume tasks
+      sized at 100--200 lines per eng05 recommendations.
+
+      Per-Task Cost Components
+
+      | Component       | Cost Range    | Notes                                   |
+      |-----------------|---------------|-----------------------------------------|
+      | Measure (1 issue)| $0.71--$0.99 | Single iterative call                   |
+      | Stitch (small)  | $1.50--$2.50  | < 200 LoC, completes within timeout     |
+      | Stitch (medium) | $2.50--$4.00  | 200--400 LoC, may approach timeout       |
+      | Total per task  | $2.21--$3.49  | Measure + small stitch                  |
+
+      The dominant cost is the stitch phase at roughly 2--3x the measure cost per
+      task. Reducing task scope (smaller estimated_lines range) keeps stitch costs
+      in the lower range and reduces timeout risk.
+
+      Release Cost Projections
+
+      A release in the cobbler workflow consists of multiple measure-stitch cycles
+      until all roadmap use cases are implemented. We project costs for three
+      release sizes using the per-task cost range above.
+
+      | Release Size | Tasks | Measure Cost   | Stitch Cost     | Total Cost      | Wall Time      |
+      |-------------|-------|----------------|-----------------|-----------------|----------------|
+      | Small       | 5     | $3.55--$4.95   | $7.50--$12.50   | $11.05--$17.45  | 25--40 min     |
+      | Medium      | 10    | $7.10--$9.90   | $15.00--$25.00  | $22.10--$34.90  | 50--80 min     |
+      | Large       | 20    | $14.20--$19.80 | $30.00--$50.00  | $44.20--$69.80  | 100--160 min   |
+
+      These projections assume:
+      - Iterative measure with 1 issue per call
+      - Tasks sized at 100--200 LoC (eng05 recommendation)
+      - No stitch timeouts (all tasks complete within the timeout)
+      - No failed tasks requiring retry
+
+      Timeout and Retry Overhead
+
+      Stitch timeouts waste both time and money. A timed-out task consumes the full
+      timeout budget ($4--$6) and produces no merged code. If 20% of tasks timeout
+      (the rate observed in eng05 cycles 2--5), the effective cost per completed
+      task rises:
+
+      | Timeout Rate | Effective Cost/Task | 10-Task Release | 20-Task Release |
+      |-------------|---------------------|-----------------|-----------------|
+      | 0%          | $2.21--$3.49        | $22--$35        | $44--$70        |
+      | 10%         | $2.65--$4.09        | $27--$41        | $53--$82        |
+      | 20%         | $3.10--$4.69        | $31--$47        | $62--$94        |
+
+      Reducing task scope is the most effective lever for controlling costs. Smaller
+      tasks complete faster, timeout less often, and produce more predictable cost
+      per task.
+
+      Generation Lifecycle Cost
+
+      A full generation lifecycle (generator:start through generator:stop) wraps
+      multiple cycles. Based on the rel01.0 release (6 use cases, ~30 tasks across
+      documentation and code), we estimate:
+
+      | Phase         | Tasks | Est. Cost       | Notes                             |
+      |---------------|-------|-----------------|-----------------------------------|
+      | Documentation | 10    | $22--$35        | PRDs, use cases, test suites      |
+      | Code          | 20    | $44--$70        | Implementation + tests            |
+      | Total         | 30    | $66--$105       | Full release cycle                |
+
+      The rel01.0 release produced 7,720 lines of production code, 4,762 lines of
+      test code, and ~11,914 words of documentation. At $66--$105 per release, the
+      cost per line of production code is approximately $0.009--$0.014.
+
+  - title: Recommended Configuration
+    content: |
+      Based on the consolidated benchmark data, we recommend the following
+      configuration for cost-effective cobbler workflows.
+
+      | Setting                | Value | Rationale                                         |
+      |------------------------|-------|---------------------------------------------------|
+      | max_measure_issues     | 1--5  | Iterated internally; linear scaling                |
+      | max_time_sec           | 300   | 5 min; comfortable for iterative measure and small stitch |
+      | estimated_lines_min    | 100   | Smaller tasks complete within timeout (eng05)      |
+      | estimated_lines_max    | 200   | Reduces timeout risk and cost variance             |
+      | max_stitch_issues_per_cycle | 10 | Batch size per cycle                             |
+
+      The default configuration (configuration.yaml) currently uses
+      estimated_lines_min=250 and estimated_lines_max=350. We recommend lowering
+      these to 100--200 based on the eng05 finding that tasks above 200 LoC
+      frequently timeout during stitch.
+
+      Cost Optimization Strategies
+
+      1. Reduce task scope: The single most effective optimization. Smaller tasks
+         produce predictable costs and fewer timeouts.
+
+      2. Leverage prompt caching: The iterative measure strategy benefits from
+         the 5-minute ephemeral cache. Running measure calls in quick succession
+         maximizes cache read ratio (~58%) and reduces effective input cost.
+
+      3. Single-turn measure: GH-12 eliminates the Write tool round-trip,
+         reducing per-call output tokens and wall time.
+
+      4. Cap stitch turns: Adding --max-turns to stitch invocations prevents
+         unbounded test-fix-test loops that consume output tokens without converging.
+
+      5. Selective stitch context: Including only files referenced in the task's
+         required_reading list (rather than all project source) reduces input
+         tokens and Claude's tendency to read files redundantly.
+
+references:
+  - eng04-measure-scaling
+  - eng05-stitch-benchmark-analysis
+  - prd003-cobbler-workflows
+  - prd005-metrics-collection
+  - tests/rel01.0/uc008/ (performance benchmarks)

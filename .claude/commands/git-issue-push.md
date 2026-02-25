@@ -1,4 +1,4 @@
-Create a GitHub issue in `petar-djukic/cobbler-scaffold`.
+Create a GitHub issue in the current repository.
 
 ## Input
 
@@ -6,12 +6,13 @@ $ARGUMENTS
 
 ## Steps
 
-1. Determine type from the input: keywords like "bug", "fix", "broken", "crash" → bug; otherwise → enhancement.
-2. Draft a concise title and well-structured body.
+1. Detect the repo: run `gh repo view --json nameWithOwner -q .nameWithOwner` and use the result as `<owner>/<repo>` for all `gh` commands.
+2. Determine type from the input: keywords like "bug", "fix", "broken", "crash" → bug; otherwise → enhancement.
+3. Draft a concise title and well-structured body.
    - **Bug**: problem, expected vs actual behavior, reproduction steps if provided.
    - **Enhancement**: description and acceptance criteria.
-3. Create the issue:
+4. Create the issue:
    ```
-   gh issue create --repo petar-djukic/cobbler-scaffold --title "<title>" --body "<body>" --label "<bug|enhancement>"
+   gh issue create --repo <owner>/<repo> --title "<title>" --body "<body>" --label "<bug|enhancement>"
    ```
-4. Report the issue URL.
+5. Report the issue URL.

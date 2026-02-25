@@ -335,27 +335,3 @@ func TestRel01_UC002_ResetFromGenBranch(t *testing.T) {
 	}
 }
 
-// Stitch100 runs generator:run with max_stitch_issues=100 and
-// max_stitch_issues_per_cycle=10 to verify the orchestrator handles a large
-// number of stitch iterations.
-func TestRel01_UC002_Stitch100(t *testing.T) {
-	t.Parallel()
-	dir := testutil.SetupRepo(t, snapshotDir)
-	testutil.SetupClaude(t, dir)
-
-	testutil.WriteConfigOverride(t, dir, func(cfg *orchestrator.Config) {
-		cfg.Cobbler.MaxMeasureIssues = 5
-		cfg.Cobbler.MaxStitchIssues = 100
-		cfg.Cobbler.MaxStitchIssuesPerCycle = 10
-	})
-
-	if err := testutil.RunMage(t, dir, "reset"); err != nil {
-		t.Fatalf("reset: %v", err)
-	}
-	if err := testutil.RunMage(t, dir, "generator:start"); err != nil {
-		t.Fatalf("generator:start: %v", err)
-	}
-	if err := testutil.RunMage(t, dir, "generator:run"); err != nil {
-		t.Fatalf("generator:run: %v", err)
-	}
-}

@@ -1,6 +1,6 @@
 <!-- Copyright (c) 2026 Petar Djukic. All rights reserved. SPDX-License-Identifier: MIT -->
 
-Pop a GitHub issue from `petar-djukic/cobbler-scaffold`, decompose it into a local beads epic with sub-issues on a feature branch, and open a PR when the epic is complete.
+Pop a GitHub issue from the current repository, decompose it into a local beads epic with sub-issues on a feature branch, and open a PR when the epic is complete.
 
 ## Input
 
@@ -8,11 +8,15 @@ $ARGUMENTS
 
 If arguments contain an issue number (e.g. `42` or `#42`), use that issue. If arguments contain a URL, extract the issue number. If no number is given, list open issues and ask the user to pick one.
 
+## Phase 0 -- Detect Repository
+
+1. Run `gh repo view --json nameWithOwner -q .nameWithOwner` and use the result as `<owner>/<repo>` for all `gh` commands below.
+
 ## Phase 1 -- Fetch the GitHub Issue
 
 1. Fetch the issue:
    ```
-   gh issue view <number> --repo petar-djukic/cobbler-scaffold --json number,title,body,labels,state
+   gh issue view <number> --repo <owner>/<repo> --json number,title,body,labels,state
    ```
 2. If the issue is not open, stop and report its state.
 3. Display the issue title, body, and labels to the user.
@@ -65,7 +69,7 @@ After user approval:
    ```
    Include in the epic description:
    - The full GitHub issue body
-   - A reference line: `GitHub: petar-djukic/cobbler-scaffold#<number>`
+   - A reference line: `GitHub: <owner>/<repo>#<number>`
 
 4. Create sub-issues under the epic:
    ```
@@ -108,7 +112,7 @@ When ALL sub-issues in the epic are closed (check with `bd epic close-eligible`)
 
 3. Open a pull request against `main`:
    ```bash
-   gh pr create --repo petar-djukic/cobbler-scaffold \
+   gh pr create --repo <owner>/<repo> \
      --base main \
      --head gh-<number>-<slug> \
      --title "GH-<number>: <title>" \

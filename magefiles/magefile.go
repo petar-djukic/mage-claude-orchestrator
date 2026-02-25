@@ -195,6 +195,14 @@ func (Test) Uc(uc string) error {
 	return cmd.Run()
 }
 
+// Benchmark runs long-running benchmark tests (e.g., Stitch100).
+func (Test) Benchmark() error {
+	cmd := exec.Command("go", "test", "-tags=benchmark", "-v", "-count=1", "-timeout", "7200s", "./tests/rel01.0/...")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
 // --- Cobbler targets ---
 
 // Measure assesses project state and proposes new tasks via Claude.

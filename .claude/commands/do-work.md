@@ -197,7 +197,7 @@ When you close the **last issue in an epic** (all child tasks complete), perform
 
      ```bash
      bd epic close-eligible
-     gh issue close <number> --repo petar-djukic/cobbler-scaffold --comment "Completed locally. Epic: <epic-id>"
+     gh issue close <number> --repo "$(gh repo view --json nameWithOwner -q .nameWithOwner)" --comment "Completed locally. Epic: <epic-id>"
      bd sync
      git add -A
      git commit -m "Close GH-<number>: <title>"

@@ -26,40 +26,47 @@ releases:
       - id: rel01.0-uc005-resume-recovery
         summary: Generation resume with stale task recovery
         status: done
+      - id: rel01.0-uc006-scaffold-operations
+        summary: Scaffold orchestrator into consuming projects, uninstall, test repo setup
+        status: done
+      - id: rel01.0-uc007-build-tooling
+        summary: Go build, lint, test, install, clean, and credential extraction
+        status: done
       - id: rel01.0-uc008-performance-benchmarks
         summary: Wall-clock benchmarks for measure and stitch workflows
         status: done
       - id: rel01.0-uc009-phase-context-files
         summary: Per-phase context specification files for measure and stitch
-        status: not started
+        status: done
 
   - version: "02.0"
     name: VS Code Extension
-    status: not started
+    status: done
     description: |
       VS Code extension for generation tracking, lifecycle management,
       branch comparison, issue visualization, and metrics dashboards.
       Provides editor-integrated visibility into orchestrator state
-      without leaving VS Code.
+      without leaving VS Code. Implemented as 2,528 lines of TypeScript
+      across 10 source modules with unit tests.
     use_cases:
       - id: rel02.0-uc001-lifecycle-commands
         summary: Lifecycle commands (start, run, resume, stop, reset, switch) via integrated terminal
-        status: not started
+        status: done
       - id: rel02.0-uc002-generation-browser
         summary: Tree view listing generations with lifecycle state and version tags
-        status: not started
+        status: done
       - id: rel02.0-uc003-branch-comparison
         summary: Tag-to-tag and generation-to-generation diff views
-        status: not started
+        status: done
       - id: rel02.0-uc004-issue-tracker-view
         summary: Beads issue tree with status grouping and InvocationRecord display
-        status: not started
+        status: done
       - id: rel02.0-uc005-metrics-dashboard
         summary: Webview panel aggregating token usage, LOC progression, and diff stats
-        status: not started
+        status: done
       - id: rel02.0-uc006-specification-browser
         summary: Spec tree view and CodeLens for bidirectional spec-to-code navigation
-        status: not started
+        status: done
 
   - version: "99.0"
     name: Unscheduled

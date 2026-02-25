@@ -304,7 +304,7 @@ func TestContextExclude(t *testing.T) {
 		ContextExclude: "docs/extra.yaml\npkg/app/util.go",
 	}
 
-	ctx, err := buildProjectContext("", project)
+	ctx, err := buildProjectContext("", project, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -346,7 +346,7 @@ func TestContextIncludeReplacesStandard(t *testing.T) {
 		ContextInclude: "docs/custom.yaml",
 	}
 
-	ctx, err := buildProjectContext("", project)
+	ctx, err := buildProjectContext("", project, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -385,7 +385,7 @@ func TestContextExcludeDirectory(t *testing.T) {
 		ContextExclude: "pkg/sub",
 	}
 
-	ctx, err := buildProjectContext("", project)
+	ctx, err := buildProjectContext("", project, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -422,7 +422,7 @@ func TestContextIncludeWithExclude(t *testing.T) {
 		ContextExclude: "docs/inc2.yaml",
 	}
 
-	ctx, err := buildProjectContext("", project)
+	ctx, err := buildProjectContext("", project, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -711,7 +711,7 @@ func TestContextExcludeEverything(t *testing.T) {
 		ContextExclude: ".",
 	}
 
-	ctx, err := buildProjectContext("", project)
+	ctx, err := buildProjectContext("", project, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -122,6 +122,8 @@ requirements:
       - R10.3: vscode:push must verify that required tools (npm, code CLI) are available on PATH before proceeding, and abort with a clear error if any tool is missing
       - R10.4: mage vscode:pop must uninstall the extension from VS Code using the code CLI and report success or failure
       - R10.5: vscode:push must log each step (dependency install, compile, package, install) using the orchestrator logging pattern so progress is visible in the terminal
+      - R10.6: vscode:push and vscode:pop must accept an optional profile name parameter; when provided, the code CLI is invoked with --profile <name> so the extension is installed into or removed from the specified VS Code profile
+      - R10.7: When no profile is specified, vscode:push must install to the default profile and log a message indicating how to target a specific profile (e.g., mage vscode:push <profile>)
 
 non_goals:
   - This PRD does not define a general-purpose extension reusable by consuming projects
@@ -148,6 +150,8 @@ acceptance_criteria:
   - mage vscode:push compiles TypeScript, packages a .vsix, and installs the extension into VS Code in a single invocation
   - mage vscode:push aborts with a clear error when npm or the code CLI is not found on PATH
   - mage vscode:pop uninstalls the extension from VS Code and reports the outcome
+  - "mage vscode:push GO installs the extension into the GO profile; mage vscode:pop GO removes it from the GO profile"
+  - "mage vscode:push with no profile installs to the default profile and logs how to specify a profile"
 
 references:
   - prd001-orchestrator-core

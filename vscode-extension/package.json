@@ -5,6 +5,10 @@
   "version": "0.0.1",
   "publisher": "mesh-intelligence",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/petar-djukic/cobbler-scaffold"
+  },
   "engines": {
     "vscode": "^1.85.0"
   },

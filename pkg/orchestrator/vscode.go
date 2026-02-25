@@ -78,7 +78,7 @@ func (o *Orchestrator) VscodePush(profile string) error {
 
 	// Step 4: package as .vsix.
 	logf("vscode:push: packaging extension as %s", vsixName)
-	packageCmd := exec.Command(binNpx, "@vscode/vsce", "package")
+	packageCmd := exec.Command(binNpx, "@vscode/vsce", "package", "--allow-missing-repository")
 	packageCmd.Dir = extDir
 	packageCmd.Stdout = os.Stdout
 	packageCmd.Stderr = os.Stderr
@@ -86,8 +86,13 @@ func (o *Orchestrator) VscodePush(profile string) error {
 		return fmt.Errorf("vscode:push: vsce package failed: %w", err)
 	}
 
-	// Step 5: install the extension.
+	// Verify the .vsix file was produced before attempting install.
 	vsixPath := filepath.Join(extDir, vsixName)
+	if _, err := os.Stat(vsixPath); err != nil {
+		return fmt.Errorf("vscode:push: expected %s but file not found after packaging", vsixPath)
+	}
+
+	// Step 5: install the extension.
 	codeArgs := codeInstallArgs(vsixPath, profile)
 	logf("vscode:push: installing extension from %s", vsixPath)
 	if profile != "" {

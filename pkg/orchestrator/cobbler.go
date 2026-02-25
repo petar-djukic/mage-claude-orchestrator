@@ -119,11 +119,22 @@ type StitchReport struct {
 	LOCAfter  LocSnapshot  `yaml:"loc_after"`
 }
 
+// historyDir returns the resolved history directory path. When HistoryDir is
+// relative it is joined with Cobbler.Dir so that history files live under the
+// cobbler scratch directory (e.g. ".cobbler/history").
+func (o *Orchestrator) historyDir() string {
+	d := o.cfg.Cobbler.HistoryDir
+	if d == "" || filepath.IsAbs(d) {
+		return d
+	}
+	return filepath.Join(o.cfg.Cobbler.Dir, d)
+}
+
 // saveHistoryReport writes a stitch report YAML file to the history directory.
 // The file is named {ts}-stitch-report.yaml. When HistoryDir is empty the
 // call is a no-op, consistent with the other save functions.
 func (o *Orchestrator) saveHistoryReport(ts string, report StitchReport) {
-	dir := o.cfg.Cobbler.HistoryDir
+	dir := o.historyDir()
 	if dir == "" {
 		return
 	}
@@ -149,7 +160,7 @@ func (o *Orchestrator) saveHistoryReport(ts string, report StitchReport) {
 // saveHistoryStats writes a stats YAML file to the history directory.
 // The file is named {ts}-{phase}-stats.yaml.
 func (o *Orchestrator) saveHistoryStats(ts, phase string, stats HistoryStats) {
-	dir := o.cfg.Cobbler.HistoryDir
+	dir := o.historyDir()
 	if dir == "" {
 		return
 	}
@@ -175,7 +186,7 @@ func (o *Orchestrator) saveHistoryStats(ts, phase string, stats HistoryStats) {
 // saveHistoryPrompt writes the prompt to the history directory.
 // Called BEFORE runClaude so the prompt is on disk even if Claude times out.
 func (o *Orchestrator) saveHistoryPrompt(ts, phase, prompt string) {
-	dir := o.cfg.Cobbler.HistoryDir
+	dir := o.historyDir()
 	if dir == "" {
 		return
 	}
@@ -194,7 +205,7 @@ func (o *Orchestrator) saveHistoryPrompt(ts, phase, prompt string) {
 // saveHistoryLog writes the raw Claude output to the history directory.
 // Called AFTER runClaude completes.
 func (o *Orchestrator) saveHistoryLog(ts, phase string, rawOutput []byte) {
-	dir := o.cfg.Cobbler.HistoryDir
+	dir := o.historyDir()
 	if dir == "" {
 		return
 	}

@@ -53,8 +53,8 @@ func (o *Orchestrator) RunStitchN(limit int) (int, error) {
 	stitchStart := time.Now()
 
 	// Start orchestrator log capture.
-	if o.cfg.Cobbler.HistoryDir != "" {
-		logPath := filepath.Join(o.cfg.Cobbler.HistoryDir,
+	if hdir := o.historyDir(); hdir != "" {
+		logPath := filepath.Join(hdir,
 			stitchStart.Format("2006-01-02-15-04-05")+"-stitch-orchestrator.log")
 		if err := openLogSink(logPath); err != nil {
 			logf("warning: could not open orchestrator log: %v", err)

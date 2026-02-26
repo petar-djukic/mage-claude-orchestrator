@@ -68,6 +68,19 @@ releases:
         summary: Spec tree view and CodeLens for bidirectional spec-to-code navigation
         status: done
 
+  - version: "03.0"
+    name: Cross-Generation Comparison
+    status: done
+    description: |
+      Differential comparison tooling for cross-generation regression
+      testing. Builds binaries from git tags (or resolves GNU references)
+      and runs test cases from YAML spec test suites to detect behavioral
+      differences between implementations.
+    use_cases:
+      - id: rel03.0-uc001-cross-generation-comparison
+        summary: Build and compare binaries from two tags with structured pass/fail output
+        status: done
+
   - version: "99.0"
     name: Unscheduled
     status: not started

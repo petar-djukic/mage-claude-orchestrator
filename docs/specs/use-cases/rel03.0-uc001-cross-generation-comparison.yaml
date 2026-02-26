@@ -1,0 +1,49 @@
+id: rel03.0-uc001-cross-generation-comparison
+title: Cross-Generation Differential Comparison
+
+summary: |
+  A developer runs mage compare:run with two arguments (git tags, "gnu", or
+  directory paths) and an optional utility filter. The orchestrator resolves
+  binaries from both sources, loads test cases from YAML spec test suites,
+  executes each test case against both binaries, and reports structured
+  pass/fail results. Worktrees and temporary build artifacts are cleaned up
+  automatically.
+
+actor: Developer (via Mage)
+
+trigger: Running mage compare:run <tagA> <tagB> with optional UTILITY environment variable
+
+flow:
+  - F1: "Parse arguments: resolve tagA and tagB into BinaryResolver instances via ResolverFromArg"
+  - F2: "Load test cases: read YAML test suite files from the specs directory, filter to cases with concrete inputs and expected outputs"
+  - F3: "Filter by utility: if UTILITY is set, restrict test cases to that utility"
+  - F4: "Discover utilities: list available utilities from both resolvers and intersect to find the common set"
+  - F5: "For each common utility: resolve binary paths from both resolvers"
+  - F6: "For each test case: execute both binaries with identical stdin, arguments, and environment"
+  - F7: "Compare outputs: check stdout byte-for-byte, stderr, and exit code; record TestResult"
+  - F8: "Format results: produce structured text output with pass/fail per test case and summary counts"
+  - F9: "Clean up: invoke cleanup functions for both resolvers (worktrees, temp directories)"
+  - F10: "Report: return success if all tests passed, error if any failed"
+
+touchpoints:
+  - T1: "BinaryResolver interface: prd004-differential-comparison R1"
+  - T2: "GitTagResolver (worktree + build): prd004-differential-comparison R2"
+  - T3: "GNUResolver (Homebrew lookup): prd004-differential-comparison R3"
+  - T4: "Test case loading from YAML specs: prd004-differential-comparison R4"
+  - T5: "Comparison execution and timeout: prd004-differential-comparison R5"
+  - T6: "Output formatting and mage target: prd004-differential-comparison R6"
+  - T7: "Git worktree management: prd003-cobbler-workflows R3.7 (worktree pattern reuse)"
+
+success_criteria:
+  - S1: Two generation tags can be compared with mage compare:run and produce pass/fail results
+  - S2: The gnu pseudo-tag resolves Homebrew reference binaries with correct g-prefix mapping
+  - S3: A directory path resolves pre-built binaries via PathResolver
+  - S4: Test cases are loaded from YAML spec test suites, not from _test.go files
+  - S5: Output shows pass/fail per utility per test case with summary counts
+  - S6: Worktrees and temporary directories are removed after comparison completes
+  - S7: A single utility can be tested by setting the UTILITY environment variable
+
+out_of_scope:
+  - Performance comparison between generations (we compare correctness only)
+  - Test case authoring or test suite format changes
+  - Concurrent comparison execution

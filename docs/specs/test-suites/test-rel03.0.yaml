@@ -1,0 +1,128 @@
+# Copyright (c) 2026 Petar Djukic. All rights reserved.
+# SPDX-License-Identifier: MIT
+
+id: test-rel03.0
+title: Release 03.0 test suite
+release: rel03.0
+traces:
+  - rel03.0-uc001-cross-generation-comparison
+
+tags:
+  - comparison
+  - differential
+  - integration
+
+preconditions:
+  - Git repository with at least one generation-merged tag
+  - Go toolchain installed
+  - GNU coreutils installed via Homebrew (for gnu resolver tests)
+  - Test suite YAML specs present in docs/specs/test-suites/
+
+# ---- uc001: Cross-generation differential comparison ----
+
+test_cases:
+  - use_case: rel03.0-uc001-cross-generation-comparison
+    name: PathResolver resolves binary from directory
+    go_test: TestPathResolver_ResolvesExistingBinary
+    inputs:
+      command: |
+        resolver := PathResolver{Dir: "/tmp/bins"}
+        path, cleanup, err := resolver.Resolve("cat")
+    expected:
+      state:
+        path: "/tmp/bins/cat"
+        err: nil
+
+  - use_case: rel03.0-uc001-cross-generation-comparison
+    name: PathResolver returns error for missing binary
+    go_test: TestPathResolver_ErrorOnMissing
+    inputs:
+      command: |
+        resolver := PathResolver{Dir: "/tmp/empty"}
+        _, _, err := resolver.Resolve("nonexistent")
+    expected:
+      state:
+        err: "not nil"
+
+  - use_case: rel03.0-uc001-cross-generation-comparison
+    name: GNUResolver maps coreutils with g-prefix
+    go_test: TestGNUResolver_CoreutilsPrefix
+    inputs:
+      command: |
+        resolver := GNUResolver{}
+        name := resolver.binaryName("cat")
+    expected:
+      state:
+        name: "gcat"
+
+  - use_case: rel03.0-uc001-cross-generation-comparison
+    name: GNUResolver maps moreutils without prefix
+    go_test: TestGNUResolver_MoreutilsNoPrefix
+    inputs:
+      command: |
+        resolver := GNUResolver{}
+        name := resolver.binaryName("ts")
+    expected:
+      state:
+        name: "ts"
+
+  - use_case: rel03.0-uc001-cross-generation-comparison
+    name: ResolverFromArg selects GNUResolver for gnu argument
+    go_test: TestResolverFromArg_GNU
+    inputs:
+      command: |
+        resolver := ResolverFromArg("gnu")
+    expected:
+      state:
+        resolver_type: "GNUResolver"
+
+  - use_case: rel03.0-uc001-cross-generation-comparison
+    name: ResolverFromArg selects PathResolver for directory argument
+    go_test: TestResolverFromArg_Directory
+    inputs:
+      command: |
+        resolver := ResolverFromArg("/tmp/bins")
+    expected:
+      state:
+        resolver_type: "PathResolver"
+
+  - use_case: rel03.0-uc001-cross-generation-comparison
+    name: ResolverFromArg selects GitTagResolver for tag argument
+    go_test: TestResolverFromArg_GitTag
+    inputs:
+      command: |
+        resolver := ResolverFromArg("generation-2026-02-25-merged")
+    expected:
+      state:
+        resolver_type: "GitTagResolver"
+
+  - use_case: rel03.0-uc001-cross-generation-comparison
+    name: FormatResults produces structured pass/fail output
+    go_test: TestFormatResults_StructuredOutput
+    inputs:
+      command: |
+        results := []TestResult{
+          {Utility: "cat", Name: "basic stdin", Passed: true},
+          {Utility: "cat", Name: "empty input", Passed: false, StdoutDiff: "expected vs actual"},
+        }
+        output := FormatResults(results)
+    expected:
+      state:
+        contains_pass: true
+        contains_fail: true
+        contains_summary: true
+
+  - use_case: rel03.0-uc001-cross-generation-comparison
+    name: Compare method returns error when tests fail
+    go_test: TestCompare_ErrorOnFailure
+    inputs:
+      command: |
+        o := orchestrator.New(cfg)
+        err := o.Compare("path-a", "path-b", "")
+    expected:
+      state:
+        err: "not nil when comparison failures exist"
+
+cleanup:
+  - Remove temporary worktrees and build directories
+  - Restore working directory

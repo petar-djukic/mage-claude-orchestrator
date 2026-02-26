@@ -1,0 +1,83 @@
+id: prd004-differential-comparison
+title: Cross-Generation Differential Comparison
+
+problem: |
+  The orchestrator generates code across multiple generations, each tagged in git.
+  Developers need to compare two generations against each other or against GNU
+  reference binaries to detect regressions. The current test infrastructure
+  compares a locally-built binary against a single GNU reference found on PATH,
+  but cannot compare two arbitrary generations. Since generated code lives at git
+  tags (generation-merged tags), the comparison tool must check out tags, build,
+  and compare without requiring manual setup or environment variables.
+
+goals:
+  - G1: Define a BinaryResolver interface that abstracts binary resolution for any source (git tag, GNU reference, pre-built directory)
+  - G2: Define a test case loader that reads inputs and expected outputs from YAML spec test suites
+  - G3: Define a comparison runner that executes two binaries with identical inputs and reports differences
+  - G4: Expose comparison through a mage target that accepts two tags and an optional utility filter
+
+requirements:
+  R1:
+    title: BinaryResolver Interface
+    items:
+      - R1.1: We define a BinaryResolver interface with method Resolve(utility string) returning a binary path, a cleanup function, and an error
+      - R1.2: The cleanup function must be idempotent and safe to call multiple times
+      - R1.3: ResolverFromArg must select the correct resolver implementation based on the argument value
+
+  R2:
+    title: Git Tag Resolution
+    items:
+      - R2.1: GitTagResolver must create a temporary git worktree from the specified tag
+      - R2.2: GitTagResolver must discover cmd/ packages in the worktree and build each with go build
+      - R2.3: GitTagResolver must build binaries into a temporary directory, not into the worktree
+      - R2.4: The cleanup function must remove both the worktree and the temporary build directory
+      - R2.5: GitTagResolver must return an error if the tag does not exist or the build fails
+
+  R3:
+    title: GNU Reference Resolution
+    items:
+      - R3.1: GNUResolver must resolve Homebrew reference binaries via exec.LookPath
+      - R3.2: Coreutils must use the g-prefix convention (cat resolves to gcat, wc resolves to gwc)
+      - R3.3: Moreutils must use unprefixed names (ts resolves to ts, sponge resolves to sponge)
+      - R3.4: GNUResolver must return an error if the binary is not found on PATH
+      - R3.5: The cleanup function for GNUResolver must be a no-op
+
+  R4:
+    title: Test Case Loading
+    items:
+      - R4.1: We define a TestCase struct with fields for name, utility, stdin input, arguments, expected stdout, expected stderr, and expected exit code
+      - R4.2: LoadTestCases must read YAML test suite files from the specs directory
+      - R4.3: LoadTestCases must filter to test cases that have concrete inputs and expected outputs, skipping entries that only reference Go test functions
+      - R4.4: FilterByUtility must return only test cases matching the specified utility name
+
+  R5:
+    title: Comparison Execution
+    items:
+      - R5.1: CompareUtility must run both binaries with identical inputs for each test case
+      - R5.2: Comparison must be byte-for-byte on stdout; stderr and exit code are compared separately
+      - R5.3: Each test case execution must enforce a timeout (default 10 seconds)
+      - R5.4: We define a TestResult struct with utility name, test name, pass/fail status, and diffs for stdout, stderr, and exit code
+      - R5.5: The comparison must collect all results before formatting output
+
+  R6:
+    title: Output and Mage Integration
+    items:
+      - R6.1: FormatResults must produce structured text output showing pass/fail per utility per test case with summary counts
+      - R6.2: The Compare method on Orchestrator must accept two tag arguments and an optional utility filter
+      - R6.3: The Compare method must discover utilities from both resolvers, intersect to find the common set, and compare each
+      - R6.4: The Compare method must clean up all resolver resources via deferred cleanup calls
+      - R6.5: The Compare method must return an error if any comparison test fails
+      - R6.6: We expose a mage compare:run target that invokes the Compare method
+
+non_goals:
+  - This PRD does not define concurrent comparison execution (comparisons run sequentially per utility)
+  - This PRD does not define test case authoring or test suite format changes (we consume existing test-rel*.yaml files)
+  - This PRD does not define performance benchmarking between generations (we compare correctness only)
+
+acceptance_criteria:
+  - mage compare:run builds binaries from two git tags and runs differential tests
+  - The gnu pseudo-tag resolves Homebrew reference binaries with correct prefix mapping
+  - Test cases are sourced from YAML test suite specs, not from generated _test.go files
+  - Structured output shows pass/fail per utility per test case with summary counts
+  - Worktrees and temporary directories are cleaned up after comparison
+  - A PathResolver allows comparison against pre-built binaries in a directory

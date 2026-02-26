@@ -4,8 +4,10 @@
 package orchestrator
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -285,6 +287,120 @@ func TestExtractYAMLBlock_UnclosedBlock(t *testing.T) {
 	_, err := extractYAMLBlock(text)
 	if err == nil {
 		t.Error("expected error for unclosed YAML block")
+	}
+}
+
+// --- parseClaudeTokens ---
+
+func TestParseClaudeTokens_ValidResult(t *testing.T) {
+	t.Parallel()
+	output := []byte(`{"type":"system","message":"ready"}
+{"type":"assistant","message":{"content":[{"type":"text","text":"hello"}]}}
+{"type":"result","total_cost_usd":0.0325,"usage":{"input_tokens":1000,"output_tokens":500,"cache_creation_input_tokens":200,"cache_read_input_tokens":300}}
+`)
+	got := parseClaudeTokens(output)
+	if got.InputTokens != 1500 {
+		t.Errorf("InputTokens = %d, want 1500 (1000+200+300)", got.InputTokens)
+	}
+	if got.OutputTokens != 500 {
+		t.Errorf("OutputTokens = %d, want 500", got.OutputTokens)
+	}
+	if got.CacheCreationTokens != 200 {
+		t.Errorf("CacheCreationTokens = %d, want 200", got.CacheCreationTokens)
+	}
+	if got.CacheReadTokens != 300 {
+		t.Errorf("CacheReadTokens = %d, want 300", got.CacheReadTokens)
+	}
+	if got.CostUSD != 0.0325 {
+		t.Errorf("CostUSD = %f, want 0.0325", got.CostUSD)
+	}
+}
+
+func TestParseClaudeTokens_NoResultEvent(t *testing.T) {
+	t.Parallel()
+	output := []byte(`{"type":"system","message":"ready"}
+{"type":"assistant","message":{"content":[{"type":"text","text":"hello"}]}}
+`)
+	got := parseClaudeTokens(output)
+	if got.InputTokens != 0 || got.OutputTokens != 0 {
+		t.Errorf("expected zero tokens for missing result, got in=%d out=%d", got.InputTokens, got.OutputTokens)
+	}
+}
+
+func TestParseClaudeTokens_EmptyInput(t *testing.T) {
+	t.Parallel()
+	got := parseClaudeTokens([]byte(""))
+	if got.InputTokens != 0 {
+		t.Errorf("expected zero tokens for empty input, got %d", got.InputTokens)
+	}
+}
+
+// --- toolSummary ---
+
+func TestToolSummary_FilePath(t *testing.T) {
+	t.Parallel()
+	input := json.RawMessage(`{"file_path":"pkg/orchestrator/generator.go","content":"hello"}`)
+	got := toolSummary(input)
+	if got != "pkg/orchestrator/generator.go" {
+		t.Errorf("toolSummary(file_path) = %q, want %q", got, "pkg/orchestrator/generator.go")
+	}
+}
+
+func TestToolSummary_Command(t *testing.T) {
+	t.Parallel()
+	input := json.RawMessage(`{"command":"go test ./..."}`)
+	got := toolSummary(input)
+	if got != "go test ./..." {
+		t.Errorf("toolSummary(command) = %q, want %q", got, "go test ./...")
+	}
+}
+
+func TestToolSummary_LongCommandTruncated(t *testing.T) {
+	t.Parallel()
+	longCmd := strings.Repeat("x", 100)
+	input := json.RawMessage(`{"command":"` + longCmd + `"}`)
+	got := toolSummary(input)
+	if len(got) != 83 { // 80 + "..."
+		t.Errorf("toolSummary(long command) len = %d, want 83", len(got))
+	}
+	if !strings.HasSuffix(got, "...") {
+		t.Errorf("toolSummary(long command) should end with '...', got %q", got)
+	}
+}
+
+func TestToolSummary_Pattern(t *testing.T) {
+	t.Parallel()
+	input := json.RawMessage(`{"pattern":"**/*.go"}`)
+	got := toolSummary(input)
+	if got != "**/*.go" {
+		t.Errorf("toolSummary(pattern) = %q, want %q", got, "**/*.go")
+	}
+}
+
+func TestToolSummary_EmptyInput(t *testing.T) {
+	t.Parallel()
+	got := toolSummary(json.RawMessage(""))
+	if got != "" {
+		t.Errorf("toolSummary(empty) = %q, want empty", got)
+	}
+}
+
+func TestToolSummary_NoKnownFields(t *testing.T) {
+	t.Parallel()
+	input := json.RawMessage(`{"unknown_field":"value"}`)
+	got := toolSummary(input)
+	if got != "" {
+		t.Errorf("toolSummary(unknown) = %q, want empty", got)
+	}
+}
+
+func TestToolSummary_PriorityOrder(t *testing.T) {
+	t.Parallel()
+	// file_path should take priority over command
+	input := json.RawMessage(`{"file_path":"foo.go","command":"go build"}`)
+	got := toolSummary(input)
+	if got != "foo.go" {
+		t.Errorf("toolSummary(priority) = %q, want %q", got, "foo.go")
 	}
 }
 

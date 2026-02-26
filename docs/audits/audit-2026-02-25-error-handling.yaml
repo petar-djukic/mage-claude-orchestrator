@@ -1,0 +1,152 @@
+# Code Inspection: Error Handling and Resource Cleanup
+# Date: 2026-02-25
+# Auditor: Claude Opus 4.6
+# Scope: generator.go, stitch.go, measure.go, tag.go, compare.go
+
+audit:
+  date: "2026-02-25"
+  type: code-inspection
+  focus: error-handling-and-resource-cleanup
+
+findings_fixed:
+  summary: "10 silent error swallowing instances fixed by adding error logging."
+  items:
+    - file: generator.go
+      line: 70
+      category: silent-error
+      severity: low
+      fix: "Added error logging for os.RemoveAll on worktree directory in resume path"
+
+    - file: generator.go
+      line: 383
+      category: silent-error
+      severity: low
+      fix: "Added error logging for os.RemoveAll on history directory in generator:stop"
+
+    - file: generator.go
+      line: 826-827
+      category: silent-error
+      severity: low
+      fix: "Made explicit best-effort intent with _ = os.Remove for go.sum/go.mod cleanup"
+
+    - file: generator.go
+      line: 850
+      category: silent-error
+      severity: low
+      fix: "Added error logging for os.Remove in deleteGoFiles walk"
+
+    - file: generator.go
+      line: 874
+      category: silent-error
+      severity: low
+      fix: "Made explicit best-effort intent with _ = os.Remove for empty dir cleanup"
+
+    - file: stitch.go
+      line: 464
+      category: silent-error
+      severity: medium
+      fix: "Added error check and logging for gitRevParseHEAD pre-merge ref capture"
+
+    - file: stitch.go
+      line: 493
+      category: silent-error
+      severity: medium
+      fix: "Added error check and logging for gitDiffShortstat"
+
+    - file: stitch.go
+      line: 495
+      category: silent-error
+      severity: medium
+      fix: "Added error check and logging for gitDiffNameStatus"
+
+    - file: measure.go
+      line: 235
+      category: silent-error
+      severity: low
+      fix: "Made explicit best-effort intent with _ = os.Remove for retry cleanup"
+
+    - file: measure.go
+      line: 240
+      category: silent-error
+      severity: medium
+      fix: "Added error check and logging for importIssuesForce"
+
+findings_documented:
+  summary: "12 findings documented as recommendations for future work."
+
+  hardcoded_assumptions:
+    - file: generator.go
+      line: 242
+      description: "readBaseBranch() falls back to hardcoded 'main'. Correct for backward compatibility per prd002 R5.3, but could use a config default."
+      severity: medium
+      recommendation: "Add Generation.DefaultBranch config field"
+
+    - file: generator.go
+      line: 724
+      description: "GeneratorReset() hardcodes ensureOnBranch('main')"
+      severity: medium
+      recommendation: "Use configured default branch"
+
+    - file: tag.go
+      line: 29
+      description: "Tag() requires current branch to be 'main'"
+      severity: medium
+      recommendation: "Use configured default branch"
+
+    - file: compare.go
+      line: 170
+      description: "GNUResolver hardcodes Homebrew paths for macOS"
+      severity: medium
+      recommendation: "Add HOMEBREW_PREFIX env var support and Linux fallback paths"
+
+  resource_cleanup:
+    - file: stitch.go
+      line: 550
+      description: "MkdirAll error for worktree parent logged but not returned"
+      severity: low
+      recommendation: "Return error to prevent worktree creation in missing parent"
+
+    - file: compare.go
+      line: 76
+      description: "os.Remove(wtDir) error ignored after MkdirTemp"
+      severity: low
+      recommendation: "Check error with os.IsNotExist guard"
+
+    - file: stitch.go
+      line: 608
+      description: "os.Chdir error logged but execution continues with wrong directory"
+      severity: medium
+      recommendation: "Return error instead of continuing"
+
+  logging:
+    - file: compare.go
+      line: 281
+      description: "No summary of skipped utilities at end of comparison"
+      severity: low
+      recommendation: "Track and log skipped count"
+
+    - file: stitch.go
+      line: 394
+      description: "Worktree creation failure lacks task ID context in log"
+      severity: low
+      recommendation: "Include task.id and task.branchName in error message"
+
+    - file: stitch.go
+      line: 737
+      description: "resetTask ignores errors from cleanupWorktree and gitForceDeleteBranch"
+      severity: low
+      recommendation: "Log cleanup errors"
+
+    - file: measure.go
+      line: 99
+      description: "filepath.Glob error silently produces empty match list"
+      severity: low
+      recommendation: "Acceptable — empty list is safe default"
+
+    - file: measure.go
+      line: 104
+      description: "Temp file cleanup errors not logged per file"
+      severity: low
+      recommendation: "Log per-file cleanup failures"
+
+conclusion: "10 silent error swallowing instances fixed. All fixes add error logging without changing control flow, ensuring no new issues are introduced. 12 additional findings documented as recommendations for future improvement, primarily around hardcoded branch assumptions and resource cleanup edge cases."

@@ -461,7 +461,10 @@ func (o *Orchestrator) doOneTask(task stitchTask, baseBranch, repoRoot string) e
 	}
 
 	// Capture pre-merge HEAD for diffstat.
-	preMergeRef, _ := gitRevParseHEAD()
+	preMergeRef, err := gitRevParseHEAD()
+	if err != nil {
+		logf("doOneTask: warning getting pre-merge ref: %v", err)
+	}
 
 	// Merge branch back.
 	logf("doOneTask: merging %s into %s", task.branchName, baseBranch)
@@ -487,9 +490,15 @@ func (o *Orchestrator) doOneTask(task stitchTask, baseBranch, repoRoot string) e
 	logf("doOneTask: merge completed in %s", time.Since(mergeStart).Round(time.Second))
 
 	// Capture LOC diff, per-file diff, and post-merge LOC.
-	diff, _ := gitDiffShortstat(preMergeRef)
+	diff, diffErr := gitDiffShortstat(preMergeRef)
+	if diffErr != nil {
+		logf("doOneTask: warning getting diff shortstat: %v", diffErr)
+	}
 	logf("doOneTask: diff files=%d ins=%d del=%d", diff.FilesChanged, diff.Insertions, diff.Deletions)
-	fileChanges, _ := gitDiffNameStatus(preMergeRef)
+	fileChanges, fcErr := gitDiffNameStatus(preMergeRef)
+	if fcErr != nil {
+		logf("doOneTask: warning getting file changes: %v", fcErr)
+	}
 	logf("doOneTask: fileChanges=%d entries", len(fileChanges))
 	locAfter := o.captureLOC()
 	logf("doOneTask: locAfter prod=%d test=%d", locAfter.Production, locAfter.Test)

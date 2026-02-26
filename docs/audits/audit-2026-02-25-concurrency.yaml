@@ -1,0 +1,84 @@
+# Code Inspection: Concurrency and Configuration
+# Date: 2026-02-25
+# Auditor: Claude Opus 4.6
+# Scope: stitch.go, orchestrator.go, config.go, configuration.yaml
+
+audit:
+  date: "2026-02-25"
+  type: code-inspection
+  focus: concurrency-and-configuration
+
+concurrency:
+  summary: "The orchestrator is single-threaded by design. No goroutines are spawned for stitch or measure operations. The sequential RunStitchN loop processes one task at a time. Concurrency issues are theoretical."
+
+  findings:
+    - id: conc-001
+      severity: low
+      file: orchestrator.go
+      lines: "44, 54-55, 110-132"
+      description: "Package-level variables currentGeneration, currentPhase, and phaseStart are read in logf() and written by setGeneration/setPhase without synchronization. logSink has a mutex (logSinkMu) but these three do not."
+      risk: "No risk in current single-threaded design. Would become a race condition if goroutines are introduced."
+      recommendation: "If parallel stitch is ever implemented, protect these with a mutex. For now, document the single-threaded assumption."
+      action: none
+
+    - id: conc-002
+      severity: low
+      file: stitch.go
+      lines: "104, 120-146"
+      description: "Worktree base directory is shared across tasks but each task gets a unique issue ID subdirectory. The RunStitchN loop is sequential."
+      risk: "No risk in current single-threaded design. Two separate Orchestrator instances on the same repo could conflict."
+      recommendation: "If parallel stitch is planned, add directory-level locking."
+      action: none
+
+    - id: conc-003
+      severity: info
+      file: stitch.go
+      description: "No goroutines, channels, or WaitGroups found in stitch.go. All task processing is sequential."
+      action: none
+
+configuration:
+  summary: "All Config struct fields are consumed by production code. No dead config fields found. The configuration.yaml template omits some fields that fall back to defaults."
+
+  dead_config_check:
+    - field: ProjectConfig.ContextInclude
+      defined: config.go:54
+      used: context.go:980
+      status: active
+
+    - field: ProjectConfig.ContextExclude
+      defined: config.go:60
+      used: context.go:981
+      status: active
+
+    - field: ProjectConfig.Release
+      defined: config.go:62
+      used: context.go:983
+      status: active
+
+    - field: CobblerConfig.GoldenExample
+      defined: config.go:159
+      used: measure.go prompt building
+      status: active
+
+    - field: CobblerConfig.MaxContextBytes
+      defined: config.go
+      used: stitch.go:655
+      status: active
+
+    - field: CobblerConfig.EnforceMeasureValidation
+      defined: config.go
+      used: measure.go:476
+      status: active
+
+    - field: CobblerConfig.MaxMeasureRetries
+      defined: config.go
+      used: measure.go:131
+      status: active
+
+  schema_gaps:
+    - id: schema-001
+      severity: low
+      description: "configuration.yaml template omits optional fields (golden_example, enforce_measure_validation, max_measure_retries, max_context_bytes, context_include, context_exclude, release) that fall back to sane defaults."
+      recommendation: "Add commented-out examples to configuration.yaml for discoverability. Low priority since defaults are correct."
+
+conclusion: "No concurrency bugs found. The orchestrator is single-threaded by design. All configuration fields are consumed. The configuration.yaml template omits some optional fields that default correctly. No code changes required."

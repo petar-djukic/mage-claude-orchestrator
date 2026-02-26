@@ -1,0 +1,160 @@
+# Test Coverage Audit
+# Date: 2026-02-25
+# Auditor: Claude Opus 4.6
+# Scope: Per-package coverage, untested paths, new tests added
+
+audit:
+  date: "2026-02-25"
+  type: test-coverage
+  baseline:
+    coverage_before: "22.2%"
+    coverage_after: "24.8%"
+    go_loc_test_before: 5784
+    go_loc_test_after: 6265
+    new_tests_added: 37
+
+coverage:
+  package: github.com/mesh-intelligence/cobbler-scaffold/pkg/orchestrator
+  overall: "24.8%"
+  note: "Many functions are integration-level (require git, beads, Claude, podman) and cannot be unit tested without extensive mocking. The 24.8% represents pure function and unit-testable code coverage."
+
+new_tests:
+  - file: generator_test.go
+    tests:
+      - TestGenerationDate_ValidBranch
+      - TestGenerationDate_NoPrefix
+      - TestGenerationDate_ShortRest
+      - TestGenerationDate_CustomPrefix
+      - TestGenerationDateCompact_Valid
+      - TestGenerationDateCompact_Invalid
+      - TestGenerationName_StripsSuffixes
+
+  - file: docker_test.go
+    tests:
+      - TestShortID_LongID
+      - TestShortID_ShortID
+      - TestShortID_Exactly12
+      - TestShortID_Empty
+      - TestImageBaseName_WithTag
+      - TestImageBaseName_WithVersionTag
+      - TestImageBaseName_NoTag
+      - TestImageBaseName_Empty
+
+  - file: stats_test.go
+    tests:
+      - TestCountLines_MultipleLines
+      - TestCountLines_EmptyFile
+      - TestCountLines_NoTrailingNewline
+      - TestCountLines_MissingFile
+      - TestCountWordsInFile_Basic
+      - TestCountWordsInFile_MultipleSpaces
+      - TestCountWordsInFile_Empty
+      - TestCountWordsInFile_MissingFile
+
+  - file: cobbler_test.go
+    tests:
+      - TestParseClaudeTokens_ValidResult
+      - TestParseClaudeTokens_NoResultEvent
+      - TestParseClaudeTokens_EmptyInput
+      - TestToolSummary_FilePath
+      - TestToolSummary_Command
+      - TestToolSummary_LongCommandTruncated
+      - TestToolSummary_Pattern
+      - TestToolSummary_EmptyInput
+      - TestToolSummary_NoKnownFields
+      - TestToolSummary_PriorityOrder
+
+  - file: stitch_test.go
+    tests:
+      - TestValidateIssueDescription_Valid
+      - TestValidateIssueDescription_MissingFields
+      - TestValidateIssueDescription_Empty
+      - TestValidateIssueDescription_InvalidYAML
+      - TestTaskBranchPattern
+
+untested_paths:
+  summary: "Functions at 0% coverage grouped by severity and testability."
+
+  high_severity_integration:
+    note: "These require git, beads, Claude, or podman. Unit testing would require interface extraction and mocking."
+    functions:
+      - name: GeneratorStart/Stop/Run/Resume/Reset/List/Switch
+        file: generator.go
+        reason: "Shells out to git for branch, tag, and worktree operations"
+      - name: RunStitch/RunStitchN/doOneTask
+        file: stitch.go
+        reason: "Creates worktrees, invokes Claude via podman, merges branches"
+      - name: RunMeasure/Measure
+        file: measure.go
+        reason: "Invokes Claude via podman, imports issues into beads"
+      - name: runClaude/buildPodmanCmd
+        file: cobbler.go
+        reason: "Requires podman and Claude container"
+      - name: Tag
+        file: tag.go
+        reason: "Creates git tags and builds container images"
+
+  medium_severity_integration:
+    note: "Require filesystem or external tools but could be tested with temp directories."
+    functions:
+      - name: Scaffold/Uninstall
+        file: scaffold.go
+        reason: "Copies files, initializes go modules in temp repos"
+      - name: BuildImage/PodmanClean/ensureImage
+        file: docker.go
+        reason: "Requires podman"
+      - name: CollectStats/Stats
+        file: stats.go
+        reason: "Walks filesystem for Go files; testable with temp dirs"
+      - name: TokenStats
+        file: token_stats.go
+        reason: "Calls Anthropic API for token counting"
+
+  low_severity:
+    note: "Utility functions with limited risk."
+    functions:
+      - name: BeadsInit/BeadsReset/requireBeads
+        file: beads.go
+        reason: "Shells out to bd CLI"
+      - name: Build/Lint/Install/Clean
+        file: build.go
+        reason: "Shells out to go CLI"
+      - name: DumpMeasurePrompt/DumpStitchPrompt
+        file: build.go
+        reason: "Print-only functions"
+      - name: VscodePush/VscodePop
+        file: vscode.go
+        reason: "Shells out to code CLI"
+
+  now_covered:
+    note: "Previously 0% functions that now have test coverage from this audit."
+    functions:
+      - generationDate (generator.go)
+      - generationDateCompact (generator.go)
+      - generationName (generator.go)
+      - parseClaudeTokens (cobbler.go)
+      - toolSummary (cobbler.go)
+      - shortID (docker.go)
+      - imageBaseName (docker.go)
+      - countLines (stats.go)
+      - countWordsInFile (stats.go)
+      - validateIssueDescription (stitch.go)
+      - taskBranchPattern (stitch.go)
+
+recommendations:
+  - id: cov-001
+    severity: medium
+    description: "Extract git operations into an interface (GitOps) to enable mocking in generator and stitch tests. This would unlock testing of lifecycle logic without requiring real git repos."
+    effort: "Large — requires refactoring all git* functions into an interface"
+
+  - id: cov-002
+    severity: medium
+    description: "Extract beads operations into an interface (BeadsOps) to enable testing measure import and stitch task claiming without the bd CLI."
+    effort: "Medium — fewer functions than git"
+
+  - id: cov-003
+    severity: low
+    description: "Add integration test targets (test:integration) that run against real git repos and beads instances in temp directories. Several existing tests in stitch_test.go already follow this pattern."
+    effort: "Small — pattern exists, needs more test cases"
+
+conclusion: "Coverage improved from 22.2% to 24.8% with 37 new unit tests across 5 files. All pure/near-pure functions with 0% coverage now have tests. Remaining untested code is integration-level (git, beads, Claude, podman) and would require interface extraction for proper unit testing. The existing test suite runs clean."

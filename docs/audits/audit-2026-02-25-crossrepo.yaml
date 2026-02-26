@@ -1,0 +1,121 @@
+# Cross-Repository Consistency Check
+# Date: 2026-02-25
+# Auditor: Claude Opus 4.6
+# Scope: scaffold:push, configuration.yaml, embedded files, consumer compatibility
+
+audit:
+  date: "2026-02-25"
+  type: cross-repository-consistency
+
+scaffold_push:
+  summary: "scaffold:push creates a complete orchestrator installation in consumer repos with auto-detected project settings."
+  files_created:
+    - path: magefiles/orchestrator.go
+      source: orchestrator.go.tmpl (embedded)
+      note: "Replaces existing .go files in magefiles/"
+
+    - path: magefiles/go.mod
+      source: generated via go mod init
+      note: "Wires orchestrator dependency"
+
+    - path: magefiles/version.go.tmpl
+      source: seed template
+      note: "Version generation template"
+
+    - path: docs/constitutions/design.yaml
+      source: embedded in scaffold.go
+
+    - path: docs/constitutions/planning.yaml
+      source: embedded in measure.go
+
+    - path: docs/constitutions/execution.yaml
+      source: embedded in stitch.go
+
+    - path: docs/constitutions/go-style.yaml
+      source: embedded in stitch.go
+
+    - path: docs/prompts/measure.yaml
+      source: embedded in measure.go
+
+    - path: docs/prompts/stitch.yaml
+      source: embedded in stitch.go
+
+    - path: configuration.yaml
+      source: auto-generated from project detection
+
+    - path: .cobbler/measure_context.yaml
+      source: const template in context.go
+
+    - path: .cobbler/stitch_context.yaml
+      source: const template in context.go
+
+configuration_schema:
+  summary: "Config struct and configuration.yaml are consistent. Optional fields omitted from template use correct defaults."
+  status: consistent
+  omitted_fields:
+    - field: context_include
+      reason: "Advanced — standard file discovery is the default"
+    - field: context_exclude
+      reason: "Advanced — no files excluded by default"
+    - field: release
+      reason: "Advanced — all releases included by default"
+    - field: golden_example
+      reason: "Optional measure hint — empty by default"
+    - field: enforce_measure_validation
+      reason: "Opt-in — false by default"
+    - field: max_measure_retries
+      reason: "Opt-in — 0 (no retries) by default"
+    - field: max_context_bytes
+      reason: "Opt-in — 0 (no budget) by default"
+    - field: container_credentials_path
+      reason: "Standard path for containerized Claude"
+    - field: temperature
+      reason: "Reserved for future use"
+
+project_detection:
+  summary: "Scaffold dynamically detects consumer project structure. No hardcoded paths or consumer-specific references."
+  detected_fields:
+    - field: module_path
+      method: "Reads go.mod module directive"
+    - field: binary_name
+      method: "Last segment of module path"
+    - field: main_package
+      method: "Scans cmd/ for main.go"
+    - field: go_source_dirs
+      method: "Checks existence of cmd/, pkg/, internal/, tests/"
+
+embedded_files:
+  summary: "All distributed files are embedded via go:embed directives."
+  embeds:
+    - file: pkg/orchestrator/prompts/measure.yaml
+      variable: defaultMeasurePrompt
+    - file: pkg/orchestrator/prompts/stitch.yaml
+      variable: defaultStitchPrompt
+    - file: pkg/orchestrator/constitutions/planning.yaml
+      variable: planningConstitution
+    - file: pkg/orchestrator/constitutions/execution.yaml
+      variable: executionConstitution
+    - file: pkg/orchestrator/constitutions/go-style.yaml
+      variable: goStyleConstitution
+    - file: pkg/orchestrator/constitutions/design.yaml
+      variable: designConstitution
+    - file: pkg/orchestrator/constitutions/issue-format.yaml
+      variable: issueFormatConstitution
+
+magefiles_divergence:
+  summary: "Scaffold repo and consumer repos have different mage targets by design."
+  scaffold_only:
+    - "scaffold:push (consumers cannot re-scaffold themselves)"
+    - "test:benchmark"
+    - "compare:run"
+    - "vscode:push / vscode:pop"
+  shared:
+    - "cobbler:measure / cobbler:stitch / cobbler:reset"
+    - "generator:start / run / resume / stop / reset / list / switch"
+    - "build / clean / install / lint"
+    - "stats:loc / stats:tokens"
+    - "tag"
+
+discrepancies: []
+
+conclusion: "Cross-repository consistency is fully maintained. Scaffold push creates all required files with auto-detected settings. Configuration schema matches the Config struct. No hardcoded paths or consumer-specific assumptions. Embedded files are properly bundled. Magefiles diverge by design between scaffold and consumer repos."

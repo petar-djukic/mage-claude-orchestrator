@@ -114,6 +114,81 @@ func requireBd(t *testing.T) {
 	}
 }
 
+// --- validateIssueDescription ---
+
+func TestValidateIssueDescription_Valid(t *testing.T) {
+	t.Parallel()
+	desc := `deliverable_type: code
+required_reading:
+  - pkg/orchestrator/generator.go
+files:
+  - pkg/orchestrator/generator.go
+requirements: Implement the feature
+acceptance_criteria: Tests pass`
+
+	if err := validateIssueDescription(desc); err != nil {
+		t.Errorf("valid description returned error: %v", err)
+	}
+}
+
+func TestValidateIssueDescription_MissingFields(t *testing.T) {
+	t.Parallel()
+	desc := `deliverable_type: code
+requirements: Implement the feature`
+
+	err := validateIssueDescription(desc)
+	if err == nil {
+		t.Fatal("expected error for missing fields")
+	}
+	for _, field := range []string{"required_reading", "files", "acceptance_criteria"} {
+		if !strings.Contains(err.Error(), field) {
+			t.Errorf("error should mention %q, got: %v", field, err)
+		}
+	}
+}
+
+func TestValidateIssueDescription_Empty(t *testing.T) {
+	t.Parallel()
+	err := validateIssueDescription("")
+	if err == nil {
+		t.Fatal("expected error for empty description")
+	}
+	if !strings.Contains(err.Error(), "empty") {
+		t.Errorf("error should mention 'empty', got: %v", err)
+	}
+}
+
+func TestValidateIssueDescription_InvalidYAML(t *testing.T) {
+	t.Parallel()
+	err := validateIssueDescription("{{{{not yaml")
+	if err == nil {
+		t.Fatal("expected error for invalid YAML")
+	}
+	if !strings.Contains(err.Error(), "YAML") {
+		t.Errorf("error should mention 'YAML', got: %v", err)
+	}
+}
+
+// --- taskBranchPattern ---
+
+func TestTaskBranchPattern(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		base string
+		want string
+	}{
+		{"main", "task/main-*"},
+		{"develop", "task/develop-*"},
+		{"feature/foo", "task/feature/foo-*"},
+	}
+	for _, tt := range tests {
+		got := taskBranchPattern(tt.base)
+		if got != tt.want {
+			t.Errorf("taskBranchPattern(%q) = %q, want %q", tt.base, got, tt.want)
+		}
+	}
+}
+
 func TestResetOrphanedIssues_SetsStatusToOpen(t *testing.T) {
 	requireBd(t)
 

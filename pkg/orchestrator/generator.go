@@ -67,7 +67,9 @@ func (o *Orchestrator) GeneratorResume() error {
 
 	if _, err := os.Stat(wtBase); err == nil {
 		logf("resume: removing worktree directory %s", wtBase)
-		os.RemoveAll(wtBase)
+		if err := os.RemoveAll(wtBase); err != nil {
+			logf("resume: warning removing worktree directory %s: %v", wtBase, err)
+		}
 	}
 
 	logf("resume: recovering stale tasks")
@@ -380,7 +382,9 @@ func (o *Orchestrator) mergeGeneration(branch, baseBranch string) error {
 	logf("generator:stop: resetting %s to specs-only", baseBranch)
 	_ = o.resetGoSources(branch)
 	if hdir := o.historyDir(); hdir != "" {
-		os.RemoveAll(hdir)
+		if err := os.RemoveAll(hdir); err != nil {
+			logf("generator:stop: warning removing history dir: %v", err)
+		}
 	}
 	_ = gitStageAll()
 	cleanupMsg := fmt.Sprintf("Reset %s to specs-only after v1 tag\n\nGenerated code preserved at version tags. Branch restored to documentation-only state.", baseBranch)
@@ -823,8 +827,8 @@ func (o *Orchestrator) seedFiles(version string) error {
 // reinitGoModule removes go.sum and go.mod, then creates a fresh module
 // with a local replace directive and resolves dependencies.
 func (o *Orchestrator) reinitGoModule() error {
-	os.Remove("go.sum")
-	os.Remove("go.mod")
+	_ = os.Remove("go.sum") // best-effort; file may not exist
+	_ = os.Remove("go.mod") // best-effort; file may not exist
 	if err := o.goModInit(); err != nil {
 		return fmt.Errorf("go mod init: %w", err)
 	}
@@ -847,7 +851,9 @@ func (o *Orchestrator) deleteGoFiles(root string) {
 			return filepath.SkipDir
 		}
 		if !d.IsDir() && strings.HasSuffix(path, ".go") {
-			os.Remove(path)
+			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+				logf("deleteGoFiles: warning removing %s: %v", path, err)
+			}
 		}
 		return nil
 	})
@@ -871,7 +877,7 @@ func removeEmptyDirs(root string) {
 	for i := len(dirs) - 1; i >= 0; i-- {
 		entries, err := os.ReadDir(dirs[i])
 		if err == nil && len(entries) == 0 {
-			os.Remove(dirs[i])
+			_ = os.Remove(dirs[i]) // best-effort empty dir cleanup
 		}
 	}
 }

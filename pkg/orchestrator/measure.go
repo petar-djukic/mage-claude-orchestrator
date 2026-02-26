@@ -232,12 +232,16 @@ func (o *Orchestrator) RunMeasure() error {
 			if importErr != nil {
 				logf("iteration %d import failed: %v", i+1, importErr)
 				if attempt < maxRetries {
-					os.Remove(outputFile)
-					continue // retry
+					_ = os.Remove(outputFile) // best-effort cleanup before retry
+					continue                  // retry
 				}
 				// Retries exhausted: accept with warning (R5).
 				logf("iteration %d retries exhausted, accepting last result with warnings", i+1)
-				createdIDs, _ = o.importIssuesForce(outputFile)
+				var forceErr error
+				createdIDs, forceErr = o.importIssuesForce(outputFile)
+				if forceErr != nil {
+					logf("iteration %d force import failed: %v", i+1, forceErr)
+				}
 			}
 			break // success or retries exhausted
 		}

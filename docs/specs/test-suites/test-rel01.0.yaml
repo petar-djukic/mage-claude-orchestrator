@@ -204,15 +204,17 @@ test_cases:
         go_mod_exists: true
 
   - use_case: rel01.0-uc002-generation-lifecycle
-    name: GeneratorStart fails when not on main
+    name: GeneratorStart fails when dirty worktree prevents branch switch
     go_test: TestRel01_UC002_StartFailsWhenNotOnMain
     inputs:
       command: |
-        git checkout -b feature
+        mage generator:start
+        # dirty go.mod on generation branch
+        echo "// dirty" >> go.mod
         mage generator:start
     expected:
       exit_code: 1
-      stderr_contains: "switching to main"
+      description: Second start fails because ensureCleanWorktree rejects dirty state
 
   - use_case: rel01.0-uc002-generation-lifecycle
     name: GeneratorRun executes configured cycles
@@ -227,7 +229,7 @@ test_cases:
       stdout_contains: "complete, ran 1 cycle(s)"
 
   - use_case: rel01.0-uc002-generation-lifecycle
-    name: GeneratorStop merges to main and tags
+    name: GeneratorStop merges to base branch and tags
     go_test: TestRel01_UC002_StopMergesAndTags
     inputs:
       command: mage generator:stop
@@ -238,6 +240,7 @@ test_cases:
         tag_exists_suffix: "-finished"
         tag_exists_suffix_2: "-merged"
         generation_branch_deleted: true
+      description: Start from main, stop returns to main (base branch is main)
 
   - use_case: rel01.0-uc002-generation-lifecycle
     name: GeneratorList shows all generations
@@ -316,6 +319,61 @@ test_cases:
       state:
         current_branch: "main"
         generation_branches: 0
+
+  - use_case: rel01.0-uc002-generation-lifecycle
+    name: GeneratorStart records base branch in .cobbler/base-branch
+    go_test: TestRel01_UC002_StartRecordsBaseBranch
+    inputs:
+      command: mage generator:start
+    expected:
+      exit_code: 0
+      state:
+        cobbler_base_branch_file_exists: true
+        cobbler_base_branch_content: "main"
+
+  - use_case: rel01.0-uc002-generation-lifecycle
+    name: GeneratorStart works from feature branch
+    go_test: TestRel01_UC002_StartFromFeatureBranch
+    inputs:
+      command: |
+        git checkout -b feature-test
+        mage generator:start
+    expected:
+      exit_code: 0
+      state:
+        current_branch_prefix: "generation-"
+        cobbler_base_branch_content: "feature-test"
+
+  - use_case: rel01.0-uc002-generation-lifecycle
+    name: GeneratorStop returns to feature branch after start from feature branch
+    go_test: TestRel01_UC002_StopReturnsToFeatureBranch
+    inputs:
+      command: |
+        git checkout -b feature-test
+        mage generator:start
+        mage generator:stop
+    expected:
+      exit_code: 0
+      state:
+        current_branch: "feature-test"
+        tag_exists_suffix: "-finished"
+        tag_exists_suffix_2: "-merged"
+        generation_branch_deleted: true
+
+  - use_case: rel01.0-uc002-generation-lifecycle
+    name: GeneratorStop falls back to main when .cobbler/base-branch is absent
+    go_test: TestRel01_UC002_StopFallsBackToMain
+    inputs:
+      command: |
+        mage generator:start
+        rm .cobbler/base-branch
+        git add -A && git commit -m "remove base-branch file"
+        mage generator:stop
+    expected:
+      exit_code: 0
+      state:
+        current_branch: "main"
+      description: Backward compatibility with older generations that lack .cobbler/base-branch
 
 # ---- uc003: Measure workflow task proposal ----
 

@@ -24,13 +24,14 @@ requirements:
   R2:
     title: GeneratorStart
     items:
-      - R2.1: GeneratorStart must verify the current branch is main
-      - R2.2: GeneratorStart must tag the current main state as {generationName}-start
+      - R2.1: GeneratorStart must record the current branch as the base branch; any clean branch is a valid starting point
+      - R2.2: GeneratorStart must tag the current base branch state as {generationName}-start
       - R2.3: GeneratorStart must create and switch to the generation branch
       - R2.4: GeneratorStart must reset the beads database and reinitialize with the generation prefix
       - R2.5: GeneratorStart must delete all Go source files (except magefiles) and re-seed from templates
       - R2.6: GeneratorStart must reinitialize go.mod with a fresh module and local replace directive
       - R2.7: GeneratorStart must squash intermediate commits into a single clean commit
+      - R2.8: GeneratorStart must store the base branch name in .cobbler/base-branch on the generation branch, committed as part of the squash commit
 
   R3:
     title: GeneratorRun
@@ -55,14 +56,15 @@ requirements:
     items:
       - R5.1: GeneratorStop must resolve the generation branch from Config.GenerationBranch, current branch, or auto-detect
       - R5.2: GeneratorStop must tag the generation as {generationName}-finished
-      - R5.3: GeneratorStop must switch to main and prepare for merge by resetting Go sources
-      - R5.4: GeneratorStop must merge the generation branch into main
-      - R5.5: GeneratorStop must tag the result as {generationName}-merged
-      - R5.6: GeneratorStop must create versioned tags (v{date}-code, v{date}-requirements) on main
-      - R5.7: GeneratorStop must delete the generation branch after successful merge
-      - R5.8: Before tagging, GeneratorStop must restore Go files that existed on main at the start tag but are missing after merge, so the v1 tag captures a complete snapshot
-      - R5.9: After v1 tagging, GeneratorStop must reset Go sources and remove build artifacts on main, restoring it to a specs-only state
-      - R5.10: After v1 tagging, GeneratorStop must delete the history directory from main
+      - R5.3: GeneratorStop must read the base branch from .cobbler/base-branch on the generation branch, falling back to "main" if the file is absent (backward compatibility with older generations)
+      - R5.4: GeneratorStop must switch to the base branch and prepare for merge by resetting Go sources
+      - R5.5: GeneratorStop must merge the generation branch into the base branch
+      - R5.6: GeneratorStop must tag the result as {generationName}-merged
+      - R5.7: GeneratorStop must create versioned tags (v{date}-code, v{date}-requirements) on the base branch
+      - R5.8: GeneratorStop must delete the generation branch after successful merge
+      - R5.9: Before tagging, GeneratorStop must restore Go files that existed on the base branch at the start tag but are missing after merge, so the v1 tag captures a complete snapshot
+      - R5.10: After v1 tagging, GeneratorStop must reset Go sources and remove build artifacts on the base branch, restoring it to a specs-only state
+      - R5.11: After v1 tagging, GeneratorStop must delete the history directory from the base branch
 
   R6:
     title: GeneratorReset
@@ -103,10 +105,12 @@ non_goals:
   - This PRD does not define multi-generation concurrency (one generation at a time)
 
 acceptance_criteria:
-  - GeneratorStart creates a tagged generation branch with clean state
+  - GeneratorStart creates a tagged generation branch with clean state from any clean base branch
+  - GeneratorStart records the base branch name in .cobbler/base-branch
   - GeneratorRun executes the specified number of measure+stitch cycles
   - GeneratorResume recovers from interruption and continues without data loss
-  - GeneratorStop merges to main with correct tags and cleans up the branch
+  - GeneratorStop reads the base branch from the generation branch and merges back to it with correct tags
+  - GeneratorStop falls back to "main" when .cobbler/base-branch is absent (backward compatibility)
   - GeneratorReset returns to a clean main-only state
   - GeneratorList shows active, merged, and abandoned generations
   - GeneratorSwitch commits work and changes branches safely

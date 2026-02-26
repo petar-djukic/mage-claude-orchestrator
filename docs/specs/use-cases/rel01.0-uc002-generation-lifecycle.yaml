@@ -2,37 +2,42 @@ id: rel01.0-uc002-generation-lifecycle
 title: Generation Lifecycle from Start to Stop
 
 summary: |
-  A developer starts a new generation, runs measure+stitch cycles to
-  build code on the generation branch, and stops the generation to
-  merge the result into main. The entire lifecycle is managed through
-  Mage targets without manual git operations.
+  A developer starts a new generation from any clean branch (main or a
+  feature branch), runs measure+stitch cycles to build code on the
+  generation branch, and stops the generation to merge the result back
+  into the originating base branch. The entire lifecycle is managed
+  through Mage targets without manual git operations. The base branch
+  name is recorded at start time so that stop merges back to the correct
+  branch regardless of where the generation began.
 
 actor: Developer running Mage targets for code generation
 
 trigger: Running mage generator:start to begin a new generation
 
 flow:
-  - F1: "Start generation: call GeneratorStart() which tags main, creates a generation branch, resets Go sources, and commits clean state"
+  - F1: "Start generation: call GeneratorStart() which records the current branch as the base branch, tags it, creates a generation branch, stores the base branch name in .cobbler/base-branch, resets Go sources, and commits clean state"
   - F2: "Run cycles: call GeneratorRun() to execute Config.Cycles measure+stitch cycles on the generation branch"
   - F3: "Monitor progress: call GeneratorList() to see active generations and their lifecycle tags"
-  - F4: "Stop generation: call GeneratorStop() which tags the generation, switches to main, merges, tags the result as v1, resets main to specs-only, and deletes the branch"
-  - F5: "Verify: confirm main is specs-only (no generated code) and the v1 tag preserves the complete code snapshot"
+  - F4: "Stop generation: call GeneratorStop() which tags the generation, reads the base branch from .cobbler/base-branch, switches to the base branch, merges, tags the result as v1, resets the base branch to specs-only, and deletes the generation branch"
+  - F5: "Verify: confirm the base branch is specs-only (no generated code) and the v1 tag preserves the complete code snapshot"
 
 touchpoints:
-  - T1: "GeneratorStart: prd002-generation-lifecycle R2"
+  - T1: "GeneratorStart: prd002-generation-lifecycle R2 (including R2.8 base branch recording)"
   - T2: "GeneratorRun/RunCycles: prd002-generation-lifecycle R3"
-  - T3: "GeneratorStop: prd002-generation-lifecycle R5"
+  - T3: "GeneratorStop: prd002-generation-lifecycle R5 (including R5.3 base branch reading)"
   - T4: "GeneratorList: prd002-generation-lifecycle R7"
   - T5: "Git operations: tags, branches, merges via pkg/orchestrator/commands.go"
+  - T6: "Base branch state: .cobbler/base-branch file on the generation branch"
 
 success_criteria:
-  - S1: GeneratorStart creates a generation branch with clean state and start tag
+  - S1: GeneratorStart creates a generation branch with clean state, start tag, and .cobbler/base-branch file from any clean branch
   - S2: GeneratorRun executes the specified number of cycles
-  - S3: GeneratorStop merges to main with finished and merged tags
+  - S3: GeneratorStop reads the base branch from .cobbler/base-branch and merges back to it with finished and merged tags
   - S4: The generation branch is deleted after successful stop
-  - S5: Main is specs-only after stop (no generated Go code, no build artifacts, no history) and the v1 tag preserves the complete code
+  - S5: The base branch is specs-only after stop (no generated Go code, no build artifacts, no history) and the v1 tag preserves the complete code
+  - S6: When .cobbler/base-branch is absent (older generations), GeneratorStop falls back to "main" for backward compatibility
+  - S7: Starting from a feature branch and stopping returns to that feature branch, not main
 
 out_of_scope:
   - Content of measure and stitch workflows (see rel01.0-uc003, rel01.0-uc004)
   - Recovery from interrupted runs (see rel01.0-uc005)
-

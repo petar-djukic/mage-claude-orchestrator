@@ -443,6 +443,216 @@ type GoStylePattern struct {
 }
 
 // ---------------------------------------------------------------------------
+// Design constitution (docs/constitutions/design.yaml)
+// ---------------------------------------------------------------------------
+
+// ConstitutionArticle is a single article entry shared by all constitution
+// files that use the articles list pattern.
+type ConstitutionArticle struct {
+	ID    string `yaml:"id"`
+	Title string `yaml:"title"`
+	Rule  string `yaml:"rule"`
+}
+
+// DesignDoc corresponds to docs/constitutions/design.yaml.
+type DesignDoc struct {
+	Articles               []ConstitutionArticle    `yaml:"articles"`
+	DocumentationStandards DesignStandards          `yaml:"documentation_standards"`
+	DocumentTypes          map[string]DesignDocType `yaml:"document_types"`
+	NamingConventions      map[string]string        `yaml:"naming_conventions"`
+	WritingGuidelines      map[string]string        `yaml:"writing_guidelines"`
+	TraceabilityModel      map[string]string        `yaml:"traceability_model"`
+	CompletenessChecklists map[string][]string      `yaml:"completeness_checklists"`
+}
+
+// DesignStandards holds the documentation_standards section.
+type DesignStandards struct {
+	Style              string           `yaml:"style"`
+	Voice              string           `yaml:"voice"`
+	ForbiddenTerms     []string         `yaml:"forbidden_terms"`
+	Formatting         DesignFormatting `yaml:"formatting"`
+	FiguresAndDiagrams string           `yaml:"figures_and_diagrams"`
+}
+
+// DesignFormatting holds paragraph, list, and abbreviation rules.
+type DesignFormatting struct {
+	Paragraphs     string `yaml:"paragraphs"`
+	ListsAndTables string `yaml:"lists_and_tables"`
+	Abbreviations  string `yaml:"abbreviations"`
+}
+
+// DesignDocType describes one entry in the document_types map.
+type DesignDocType struct {
+	Location       string            `yaml:"location,omitempty"`
+	FormatRule     string            `yaml:"format_rule,omitempty"`
+	RequiredFields []string          `yaml:"required_fields,omitempty"`
+	OptionalFields []string          `yaml:"optional_fields,omitempty"`
+	Numbering      map[string]string `yaml:"numbering,omitempty"`
+	Purpose        string            `yaml:"purpose,omitempty"`
+}
+
+// ---------------------------------------------------------------------------
+// Execution constitution (docs/constitutions/execution.yaml)
+// ---------------------------------------------------------------------------
+
+// ExecutionDoc corresponds to docs/constitutions/execution.yaml.
+type ExecutionDoc struct {
+	Articles          []ConstitutionArticle `yaml:"articles"`
+	CodingStandards   ExecCodingStandards   `yaml:"coding_standards"`
+	Traceability      ExecTraceability      `yaml:"traceability"`
+	SessionCompletion ExecSessionCompletion `yaml:"session_completion"`
+	Technology        ExecTechnology        `yaml:"technology"`
+	GitConventions    ExecGitConventions    `yaml:"git_conventions"`
+}
+
+// ExecCodingStandards holds the coding_standards section.
+type ExecCodingStandards struct {
+	CopyrightHeader         string               `yaml:"copyright_header"`
+	NeverDuplicateCode      string               `yaml:"never_duplicate_code"`
+	DesignPatterns          []map[string]string   `yaml:"design_patterns"`
+	Interfaces              string               `yaml:"interfaces"`
+	StructAndFunctionDesign string               `yaml:"struct_and_function_design"`
+	ErrorHandling           string               `yaml:"error_handling"`
+	NoMagicStrings          string               `yaml:"no_magic_strings"`
+	ProjectStructure        string               `yaml:"project_structure"`
+	StandardPackages        []string             `yaml:"standard_packages"`
+	NamingConventions       ExecNamingConventions `yaml:"naming_conventions"`
+	Concurrency             string               `yaml:"concurrency"`
+	Testing                 string               `yaml:"testing"`
+}
+
+// ExecNamingConventions holds the naming convention entries.
+type ExecNamingConventions struct {
+	Exported        string `yaml:"exported"`
+	Unexported      string `yaml:"unexported"`
+	CLIFlags        string `yaml:"cli_flags"`
+	BinaryConstants string `yaml:"binary_constants"`
+	Factories       string `yaml:"factories"`
+	Interfaces      string `yaml:"interfaces"`
+}
+
+// ExecTraceability holds the traceability section.
+type ExecTraceability struct {
+	BeforeImplementing []string `yaml:"before_implementing"`
+	CommitMessage      string   `yaml:"commit_message"`
+	CodeComments       string   `yaml:"code_comments"`
+	ReferencePaths     []string `yaml:"reference_paths"`
+}
+
+// ExecSessionCompletion holds the session_completion section.
+type ExecSessionCompletion struct {
+	GitManagedExternally bool     `yaml:"git_managed_externally"`
+	TokenTracking        bool     `yaml:"token_tracking"`
+	Workflow             []string `yaml:"workflow"`
+	CriticalRules        []string `yaml:"critical_rules"`
+}
+
+// ExecTechnology holds the technology section.
+type ExecTechnology struct {
+	PrimaryLanguage string `yaml:"primary_language"`
+	PythonManager   string `yaml:"python_manager"`
+	CLIFramework    string `yaml:"cli_framework"`
+	BuildSystem     string `yaml:"build_system"`
+	YAMLLibrary     string `yaml:"yaml_library"`
+	IssueTracker    string `yaml:"issue_tracker"`
+}
+
+// ExecGitConventions holds the git_conventions section.
+type ExecGitConventions struct {
+	Note string `yaml:"note"`
+}
+
+// ---------------------------------------------------------------------------
+// Planning constitution (docs/constitutions/planning.yaml)
+// ---------------------------------------------------------------------------
+
+// PlanningDoc corresponds to docs/constitutions/planning.yaml.
+type PlanningDoc struct {
+	Articles                  []ConstitutionArticle  `yaml:"articles"`
+	IssueStructure            PlanningIssueStructure `yaml:"issue_structure"`
+	ExampleDocumentationIssue string                 `yaml:"example_documentation_issue"`
+	ExampleCodeIssue          string                 `yaml:"example_code_issue"`
+}
+
+// PlanningIssueStructure holds the issue_structure section.
+type PlanningIssueStructure struct {
+	CommonFields        map[string]PlanningFieldDef `yaml:"common_fields"`
+	DocumentationIssues PlanningDocIssues           `yaml:"documentation_issues"`
+	YAMLQuality         []string                   `yaml:"yaml_quality"`
+	CodeIssues          PlanningCodeIssues          `yaml:"code_issues"`
+}
+
+// PlanningFieldDef describes a single field in the issue schema.
+type PlanningFieldDef struct {
+	Required    bool     `yaml:"required"`
+	Values      []string `yaml:"values,omitempty"`
+	Description string   `yaml:"description"`
+}
+
+// PlanningDocIssues holds the documentation_issues sub-section.
+type PlanningDocIssues struct {
+	AdditionalFields map[string]PlanningFieldDef `yaml:"additional_fields"`
+	DeliverableTypes []PlanningDeliverableType   `yaml:"deliverable_types"`
+}
+
+// PlanningDeliverableType describes a documentation deliverable type.
+type PlanningDeliverableType struct {
+	Type       string `yaml:"type"`
+	Location   string `yaml:"location"`
+	FormatRule string `yaml:"format_rule"`
+	When       string `yaml:"when"`
+}
+
+// PlanningCodeIssues holds the code_issues sub-section.
+type PlanningCodeIssues struct {
+	Rules []string `yaml:"rules"`
+}
+
+// ---------------------------------------------------------------------------
+// Testing constitution (docs/constitutions/testing.yaml)
+// ---------------------------------------------------------------------------
+
+// TestingDoc corresponds to docs/constitutions/testing.yaml.
+type TestingDoc struct {
+	Articles []ConstitutionArticle `yaml:"articles"`
+}
+
+// ---------------------------------------------------------------------------
+// Issue format constitution (pkg/orchestrator/constitutions/issue-format.yaml)
+// ---------------------------------------------------------------------------
+
+// IssueFormatDoc corresponds to pkg/orchestrator/constitutions/issue-format.yaml.
+type IssueFormatDoc struct {
+	Schema     IssueFormatSchema           `yaml:"schema"`
+	YAMLRules  []IssueFormatRule           `yaml:"yaml_rules"`
+	FieldSpecs map[string]IssueFormatField `yaml:"field_specs"`
+	Examples   map[string]string           `yaml:"examples"`
+}
+
+// IssueFormatSchema holds the schema section.
+type IssueFormatSchema struct {
+	Description    string   `yaml:"description"`
+	RequiredFields []string `yaml:"required_fields"`
+	OptionalFields []string `yaml:"optional_fields"`
+}
+
+// IssueFormatRule holds a single YAML formatting rule with examples.
+type IssueFormatRule struct {
+	Rule        string `yaml:"rule"`
+	ExampleBad  string `yaml:"example_bad"`
+	ExampleGood string `yaml:"example_good"`
+}
+
+// IssueFormatField describes a single field in the issue format spec.
+type IssueFormatField struct {
+	Type        string                      `yaml:"type"`
+	Values      []string                    `yaml:"values,omitempty"`
+	Required    bool                        `yaml:"required"`
+	Description string                      `yaml:"description"`
+	SubFields   map[string]IssueFormatField `yaml:"sub_fields,omitempty"`
+}
+
+// ---------------------------------------------------------------------------
 // Shared field types
 // ---------------------------------------------------------------------------
 

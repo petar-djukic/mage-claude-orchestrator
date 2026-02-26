@@ -606,6 +606,154 @@ func TestContextIncludeWithExclude(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// ensureTypedDocs tests
+// ---------------------------------------------------------------------------
+
+func TestEnsureTypedDocs_AddsMissingDocs(t *testing.T) {
+	_, cleanup := setupContextTestDir(t)
+	defer cleanup()
+
+	// Start with an empty file list — ensureTypedDocs should add typed docs
+	// that exist on disk.
+	files := ensureTypedDocs(nil)
+
+	// VISION, ARCHITECTURE, and road-map.yaml exist in the test fixture.
+	found := make(map[string]bool)
+	for _, f := range files {
+		found[f] = true
+	}
+	if !found["docs/VISION.yaml"] {
+		t.Error("ensureTypedDocs should add docs/VISION.yaml")
+	}
+	if !found["docs/ARCHITECTURE.yaml"] {
+		t.Error("ensureTypedDocs should add docs/ARCHITECTURE.yaml")
+	}
+	if !found["docs/road-map.yaml"] {
+		t.Error("ensureTypedDocs should add docs/road-map.yaml")
+	}
+}
+
+func TestEnsureTypedDocs_DoesNotDuplicate(t *testing.T) {
+	_, cleanup := setupContextTestDir(t)
+	defer cleanup()
+
+	// Start with VISION already in the list.
+	files := []string{"docs/VISION.yaml"}
+	result := ensureTypedDocs(files)
+
+	count := 0
+	for _, f := range result {
+		if f == "docs/VISION.yaml" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("VISION.yaml appears %d times, want 1 (no duplication)", count)
+	}
+}
+
+func TestEnsureTypedDocs_SkipsMissingFiles(t *testing.T) {
+	// Run in a temp dir where no typed docs exist.
+	dir := t.TempDir()
+	origDir, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(origDir)
+
+	files := ensureTypedDocs(nil)
+	if len(files) != 0 {
+		t.Errorf("got %d files, want 0 (no typed docs exist in temp dir)", len(files))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// loadNamedDoc markdown handling tests
+// ---------------------------------------------------------------------------
+
+func TestLoadNamedDoc_MarkdownFile(t *testing.T) {
+	dir := t.TempDir()
+	mdPath := filepath.Join(dir, "do-work.md")
+	// Markdown that fails YAML parsing (contains colons without proper quoting,
+	// matching the real-world error reported in GH-53).
+	content := "# Do Work\n\nUse this command:\n\n```bash\ncurl http://example.com\n```\n"
+	os.WriteFile(mdPath, []byte(content), 0o644)
+
+	doc := loadNamedDoc(mdPath)
+	if doc == nil {
+		t.Fatal("loadNamedDoc returned nil for markdown file")
+	}
+	if doc.Name != "do-work" {
+		t.Errorf("Name = %q, want %q", doc.Name, "do-work")
+	}
+	if doc.Content.Kind != yaml.ScalarNode {
+		t.Errorf("Content.Kind = %d, want ScalarNode (%d)", doc.Content.Kind, yaml.ScalarNode)
+	}
+	if !strings.Contains(doc.Content.Value, "# Do Work") {
+		t.Errorf("Content.Value should contain markdown content, got %q", doc.Content.Value[:50])
+	}
+}
+
+func TestLoadNamedDoc_TextFile(t *testing.T) {
+	dir := t.TempDir()
+	txtPath := filepath.Join(dir, "readme.txt")
+	os.WriteFile(txtPath, []byte("plain text"), 0o644)
+
+	doc := loadNamedDoc(txtPath)
+	if doc == nil {
+		t.Fatal("loadNamedDoc returned nil for .txt file")
+	}
+	if doc.Content.Value != "plain text" {
+		t.Errorf("Content.Value = %q, want %q", doc.Content.Value, "plain text")
+	}
+}
+
+func TestLoadNamedDoc_YAMLFileStillWorks(t *testing.T) {
+	dir := t.TempDir()
+	yamlPath := filepath.Join(dir, "config.yaml")
+	os.WriteFile(yamlPath, []byte("id: test\ntitle: Test Doc"), 0o644)
+
+	doc := loadNamedDoc(yamlPath)
+	if doc == nil {
+		t.Fatal("loadNamedDoc returned nil for YAML file")
+	}
+	if doc.Name != "config" {
+		t.Errorf("Name = %q, want %q", doc.Name, "config")
+	}
+	// YAML files should be parsed as mapping nodes, not scalar.
+	if doc.Content.Kind == yaml.ScalarNode {
+		t.Error("YAML file should not be loaded as scalar node")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// classifyContextFile tests
+// ---------------------------------------------------------------------------
+
+func TestClassifyContextFile_AllTypes(t *testing.T) {
+	cases := []struct {
+		path string
+		want string
+	}{
+		{"docs/VISION.yaml", "vision"},
+		{"docs/ARCHITECTURE.yaml", "architecture"},
+		{"docs/SPECIFICATIONS.yaml", "specifications"},
+		{"docs/road-map.yaml", "roadmap"},
+		{filepath.Join("docs", "specs", "product-requirements", "prd001-feature.yaml"), "prd"},
+		{filepath.Join("docs", "specs", "use-cases", "rel01.0-uc001-init.yaml"), "use_case"},
+		{filepath.Join("docs", "specs", "test-suites", "test-rel-01.0.yaml"), "test_suite"},
+		{filepath.Join("docs", "specs", "dependency-map.yaml"), "spec_aux"},
+		{filepath.Join("docs", "engineering", "eng01-guidelines.yaml"), "engineering"},
+		{filepath.Join("docs", "constitutions", "design.yaml"), "constitution"},
+		{"docs/custom.yaml", "extra"},
+		{"random/file.yaml", "extra"},
+	}
+	for _, tc := range cases {
+		if got := classifyContextFile(tc.path); got != tc.want {
+			t.Errorf("classifyContextFile(%q) = %q, want %q", tc.path, got, tc.want)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
 // filterSourceFiles tests
 // ---------------------------------------------------------------------------
 

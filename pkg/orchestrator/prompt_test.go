@@ -193,6 +193,33 @@ func TestMeasurePromptNoWriteToolReferences(t *testing.T) {
 	}
 }
 
+func TestMeasurePromptClosedIssueConstraint(t *testing.T) {
+	o := New(Config{})
+	prompt, err := o.buildMeasurePrompt("", "[]", 1)
+	if err != nil {
+		t.Fatalf("buildMeasurePrompt: %v", err)
+	}
+
+	if !strings.Contains(prompt, "COMPLETED work") {
+		t.Error("measure prompt missing closed-issue deduplication constraint")
+	}
+	if !strings.Contains(prompt, "completed_work") {
+		t.Error("measure prompt missing completed_work field reference")
+	}
+}
+
+func TestMeasurePromptSourceCodeOverProseConstraint(t *testing.T) {
+	o := New(Config{})
+	prompt, err := o.buildMeasurePrompt("", "[]", 1)
+	if err != nil {
+		t.Fatalf("buildMeasurePrompt: %v", err)
+	}
+
+	if !strings.Contains(prompt, "Trust the source code over prose") {
+		t.Error("measure prompt missing source-code-over-prose constraint")
+	}
+}
+
 func TestStitchPromptIsValidYAML(t *testing.T) {
 	o := New(Config{})
 	task := stitchTask{

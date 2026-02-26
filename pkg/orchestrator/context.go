@@ -102,6 +102,7 @@ type ProjectContext struct {
 	Analysis       *AnalysisDoc       `yaml:"analysis,omitempty"`
 	SourceCode     []SourceFile       `yaml:"source_code,omitempty"`
 	Issues         []ContextIssue     `yaml:"issues,omitempty"`
+	CompletedWork  []string           `yaml:"completed_work,omitempty"`
 	Extra          []*NamedDoc        `yaml:"extra,omitempty"`
 }
 

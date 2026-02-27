@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -462,6 +463,83 @@ func TestWorktreeBasePath(t *testing.T) {
 	}
 	if !strings.HasSuffix(got, "-worktrees") {
 		t.Errorf("worktreeBasePath() = %q, want suffix '-worktrees'", got)
+	}
+}
+
+// TestWorktreeBasePath_FromWorktree verifies that worktreeBasePath returns the
+// same value whether called from the main repo root or from a git worktree of
+// the same repository (prd003 R3.16, rel01.0-uc010).
+func TestWorktreeBasePath_FromWorktree(t *testing.T) {
+	// Requires git on PATH; skip gracefully if not available.
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+
+	mainDir := t.TempDir()
+	orig, _ := os.Getwd()
+	defer os.Chdir(orig)
+
+	// Initialize a git repo with an initial commit so worktree add works.
+	run := func(dir string, args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.com",
+			"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@example.com",
+		)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+
+	run(mainDir, "init", "-b", "main")
+	run(mainDir, "commit", "--allow-empty", "-m", "init")
+
+	// Add a worktree on a new branch.
+	wtDir := filepath.Join(mainDir, "wt")
+	run(mainDir, "worktree", "add", wtDir, "-b", "feature-test")
+
+	// Compute expected: derived from the main repo name.
+	expected := filepath.Join(os.TempDir(), filepath.Base(mainDir)+"-worktrees")
+
+	// Call from main repo.
+	os.Chdir(mainDir)
+	fromMain := worktreeBasePath()
+
+	// Call from inside the worktree.
+	os.Chdir(wtDir)
+	fromWorktree := worktreeBasePath()
+
+	if fromMain != expected {
+		t.Errorf("from main: got %q, want %q", fromMain, expected)
+	}
+	if fromWorktree != expected {
+		t.Errorf("from worktree: got %q, want %q", fromWorktree, expected)
+	}
+	if fromMain != fromWorktree {
+		t.Errorf("paths differ: main=%q worktree=%q", fromMain, fromWorktree)
+	}
+}
+
+// TestWorktreeBasePath_FallbackOutsideGit verifies the graceful fallback when
+// git rev-parse --git-common-dir fails (not a git repository).
+func TestWorktreeBasePath_FallbackOutsideGit(t *testing.T) {
+	dir := t.TempDir()
+	orig, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(orig)
+
+	got := worktreeBasePath()
+	if got == "" {
+		t.Fatal("worktreeBasePath() returned empty string in fallback")
+	}
+	if !strings.HasSuffix(got, "-worktrees") {
+		t.Errorf("fallback: got %q, want suffix '-worktrees'", got)
+	}
+	expected := filepath.Join(os.TempDir(), filepath.Base(dir)+"-worktrees")
+	if got != expected {
+		t.Errorf("fallback: got %q, want %q", got, expected)
 	}
 }
 

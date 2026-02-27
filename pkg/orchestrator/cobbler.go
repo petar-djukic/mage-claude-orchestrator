@@ -627,7 +627,21 @@ func (o *Orchestrator) logConfig(target string) {
 }
 
 // worktreeBasePath returns the directory used for stitch worktrees.
+// It uses git rev-parse --git-common-dir to resolve the shared .git directory
+// so the path is identical whether the orchestrator is invoked from the main
+// repo root or from a git worktree of the same repository (prd003 R3.16).
+// Falls back to filepath.Base(os.Getwd()) when git is unavailable.
 func worktreeBasePath() string {
+	out, err := exec.Command("git", "rev-parse", "--git-common-dir").Output()
+	if err == nil {
+		gitDir := filepath.Clean(strings.TrimSpace(string(out)))
+		if !filepath.IsAbs(gitDir) {
+			cwd, _ := os.Getwd()
+			gitDir = filepath.Join(cwd, gitDir)
+		}
+		repoRoot := filepath.Dir(gitDir)
+		return filepath.Join(os.TempDir(), filepath.Base(repoRoot)+"-worktrees")
+	}
 	repoRoot, _ := os.Getwd()
 	return filepath.Join(os.TempDir(), filepath.Base(repoRoot)+"-worktrees")
 }

@@ -19,56 +19,78 @@ goals:
 
 requirements:
   R1:
-    title: Config Struct
+    title: "Config Struct (nested: ProjectConfig, GenerationConfig, CobblerConfig, PodmanConfig, ClaudeConfig)"
     items:
-      - R1.1: Config must include ModulePath (string) for the Go module path
-      - R1.2: Config must include BinaryName (string) for the compiled binary name
-      - R1.3: Config must include BinaryDir (string, default "bin") for binary output
-      - R1.4: Config must include MainPackage (string) for the main.go entry point path
-      - R1.5: Config must include GoSourceDirs ([]string) listing directories with Go source
-      - R1.6: Config must include VersionFile (string) for the version.go path
-      - R1.7: Config must include GenPrefix (string, default "generation-") for generation branch names
-      - R1.8: Config must include BeadsDir (string, default ".beads/") for the issue tracker directory
-      - R1.9: Config must include CobblerDir (string, default ".cobbler/") for the scratch directory
-      - R1.10: Config must include MagefilesDir (string, default "magefiles") for the directory skipped during Go file deletion
-      - R1.11: Config must include SecretsDir (string, default ".secrets") for token files
-      - R1.12: Config must include DefaultTokenFile (string, default "claude.json") for the credential filename
-      - R1.13: Config must include SpecGlobs (map[string]string) for documentation word-count globs
-      - R1.14: Config must include SeedFiles (map[string]string) mapping destination paths to template source file paths
-      - R1.15: Config must include MeasurePrompt (string) as a file path to a custom measure prompt template
-      - R1.16: Config must include StitchPrompt (string) as a file path to a custom stitch prompt template
-      - R1.17: Config must include ClaudeArgs ([]string) for CLI arguments passed to the claude binary
-      - R1.18: Config must include SilenceAgent (*bool, default true) to suppress Claude stdout
-      - R1.19: Config must include MaxIssues (int, default 10) for the task limit per phase
-      - R1.20: Config must include Cycles (int, default 1) for the number of measure+stitch cycles per run
-      - R1.21: Config must include UserPrompt (string) for additional context in the measure prompt
-      - R1.22: Config must include GenerationBranch (string) for explicit branch selection
-      - R1.23: Config must include TokenFile (string) for a credential file override in SecretsDir
+      - R1.1: ProjectConfig must include ModulePath (string) for the Go module path
+      - R1.2: ProjectConfig must include BinaryName (string) for the compiled binary name
+      - R1.3: ProjectConfig must include BinaryDir (string, default "bin") for binary output
+      - R1.4: ProjectConfig must include MainPackage (string) for the main.go entry point path
+      - R1.5: ProjectConfig must include GoSourceDirs ([]string) listing directories with Go source
+      - R1.6: ProjectConfig must include VersionFile (string) for the version.go path
+      - R1.7: GenerationConfig must include Prefix (string, default "generation-") for generation branch names
+      - R1.8: CobblerConfig must include BeadsDir (string, default ".beads/") for the issue tracker directory
+      - R1.9: CobblerConfig must include Dir (string, default ".cobbler/") for the scratch directory
+      - R1.10: ProjectConfig must include MagefilesDir (string, default "magefiles") for the directory skipped during Go file deletion
+      - R1.11: ClaudeConfig must include SecretsDir (string, default ".secrets") for token files
+      - R1.12: ClaudeConfig must include DefaultTokenFile (string, default "claude.json") for the credential filename
+      - R1.13: ProjectConfig must include SeedFiles (map[string]string) mapping destination paths to template source file paths
+      - R1.14: CobblerConfig must include MeasurePrompt (string) as a file path to a custom measure prompt template; LoadConfig reads the referenced file and replaces the path with its content
+      - R1.15: CobblerConfig must include StitchPrompt (string) as a file path to a custom stitch prompt template; LoadConfig reads the referenced file and replaces the path with its content
+      - R1.16: ClaudeConfig must include Args ([]string) for CLI arguments passed to the claude binary
+      - R1.17: ClaudeConfig must include SilenceAgent (*bool, default true) to suppress Claude stdout
+      - R1.18: CobblerConfig must include MaxStitchIssuesPerCycle (int, default 10) for the maximum tasks processed per stitch pass before calling measure again
+      - R1.19: CobblerConfig must include MaxMeasureIssues (int, default 1) for the maximum new issues created per measure pass
+      - R1.20: GenerationConfig must include Cycles (int) for the number of measure+stitch cycles per run; 0 means run until all issues are closed
+      - R1.21: CobblerConfig must include UserPrompt (string) for additional context in the measure prompt
+      - R1.22: GenerationConfig must include Branch (string) for explicit branch selection
+      - R1.23: ClaudeConfig must include TokenFile (string) for a credential file override in SecretsDir
       - R1.24: All Config fields must have YAML struct tags using snake_case names
-      - R1.25: Config must include EstimatedLinesMin (int, default 250) for the minimum estimated lines per task
-      - R1.26: Config must include EstimatedLinesMax (int, default 350) for the maximum estimated lines per task
-      - R1.27: Config must include CleanupDirs ([]string) listing directories to remove after generation stop or reset
-      - R1.28: Config must include PodmanImage (string, required) for the container image used for Claude execution
-      - R1.29: Config must include PodmanArgs ([]string) for additional arguments passed to podman run
-      - R1.30: Config must include ClaudeMaxTimeSec (int, default 300) for the maximum seconds per Claude invocation
+      - R1.25: CobblerConfig must include EstimatedLinesMin (int, default 250) for the minimum estimated lines per task, passed to the measure prompt as LinesMin
+      - R1.26: CobblerConfig must include EstimatedLinesMax (int, default 350) for the maximum estimated lines per task, passed to the measure prompt as LinesMax
+      - R1.27: GenerationConfig must include CleanupDirs ([]string) listing directories to remove after generation stop or reset
+      - R1.28: PodmanConfig must include Image (string, default "claude-cli") for the container image used for Claude execution
+      - R1.29: PodmanConfig must include Args ([]string) for additional arguments passed to podman run
+      - R1.30: ClaudeConfig must include MaxTimeSec (int, default 300) for the maximum seconds per Claude invocation
+      - R1.31: ProjectConfig must include ContextSources (string) as a newline-delimited list of extra file paths and glob patterns that supplement standard document discovery in the measure prompt project context
+      - R1.32: ProjectConfig must include ContextInclude (string) as a newline-delimited list of glob patterns that, when set, replace the standard document discovery; only matching files are loaded
+      - R1.33: ProjectConfig must include ContextExclude (string) as a newline-delimited list of glob patterns; files matching any pattern are excluded from the project context
+      - R1.34: ProjectConfig must include Releases ([]string) listing release versions in scope for code generation; when set, use cases, test suites, and PRDs are filtered to only those versions; an empty list disables filtering
+      - R1.35: CobblerConfig must include MaxStitchIssues (int) for the total maximum number of stitch iterations per run; 0 means unlimited
+      - R1.36: CobblerConfig must include PlanningConstitution, ExecutionConstitution, DesignConstitution, and GoStyleConstitution (all string) as file paths to custom constitution YAMLs; LoadConfig reads each referenced file and replaces the path with its content; when empty, the embedded default is used
+      - R1.37: CobblerConfig must include GoldenExample (string) as a file path to a golden example issue YAML; LoadConfig reads the file and replaces the path with its content; when present, the measure prompt instructs Claude to match its style and granularity
+      - R1.38: CobblerConfig must include MaxContextBytes (int) for the maximum serialized size (bytes) of ProjectContext injected into the stitch prompt; when exceeded, non-required source files are progressively removed; 0 disables budget enforcement
+      - R1.39: CobblerConfig must include EnforceMeasureValidation (bool) to enable strict validation of measure output; when true, issues violating granularity or file-naming rules are rejected and measure retries
+      - R1.40: CobblerConfig must include MaxMeasureRetries (int) for the maximum retry attempts per iteration when EnforceMeasureValidation rejects output; 0 disables retries
+      - R1.41: CobblerConfig must include MaxRequirementsPerTask (int) for the maximum number of requirements a single proposed task may contain; when exceeded the task is rejected and the measure agent is re-prompted to split it; 0 disables the limit
+      - R1.42: CobblerConfig must include HistoryDir (string, default "history") for saving measure artifacts per iteration
+      - R1.43: CobblerConfig must include DocTagPrefix (string, default "v0.") as the prefix for documentation release tags
+      - R1.44: CobblerConfig must include BaseBranch (string, default "main") as the branch from which documentation release tags must be created
+      - R1.45: ClaudeConfig must include ContainerCredentialsPath (string, default "/home/crumbs/.claude/.credentials.json") as the absolute path inside the container where the Claude CLI expects its credentials file
+      - R1.46: ClaudeConfig must include Temperature (float64) to control Claude output randomness; when 0 (default), no temperature parameter is passed; currently reserved for future use
 
   R2:
     title: Constructor and Defaults
     items:
       - R2.1: New(Config) must return an *Orchestrator with defaults applied to zero-value fields
-      - R2.2: applyDefaults must set BinaryDir to "bin" when empty
-      - R2.3: applyDefaults must set GenPrefix to "generation-" when empty
-      - R2.4: applyDefaults must set BeadsDir to ".beads/" when empty
-      - R2.5: applyDefaults must set CobblerDir to ".cobbler/" when empty
-      - R2.6: applyDefaults must set MagefilesDir to "magefiles" when empty
-      - R2.7: applyDefaults must set SecretsDir to ".secrets" when empty
-      - R2.8: applyDefaults must set DefaultTokenFile to "claude.json" when empty
-      - R2.9: applyDefaults must set ClaudeArgs to defaultClaudeArgs when empty
-      - R2.10: applyDefaults must set MaxIssues to 10 when zero
-      - R2.11: Cycles defaults to 0 (unlimited); acts as a safety limit when positive
-      - R2.12: applyDefaults must set EstimatedLinesMin to 250 when zero
-      - R2.13: applyDefaults must set EstimatedLinesMax to 350 when zero
-      - R2.14: applyDefaults must set ClaudeMaxTimeSec to 300 when zero
+      - R2.2: applyDefaults must set Project.BinaryDir to "bin" when empty
+      - R2.3: applyDefaults must set Generation.Prefix to "generation-" when empty
+      - R2.4: applyDefaults must set Cobbler.BeadsDir to ".beads/" when empty
+      - R2.5: applyDefaults must set Cobbler.Dir to ".cobbler/" when empty
+      - R2.6: applyDefaults must set Project.MagefilesDir to "magefiles" when empty
+      - R2.7: applyDefaults must set Claude.SecretsDir to ".secrets" when empty
+      - R2.8: applyDefaults must set Claude.DefaultTokenFile to "claude.json" when empty
+      - R2.9: applyDefaults must set Claude.Args to defaultClaudeArgs when empty
+      - R2.10: applyDefaults must set Cobbler.MaxStitchIssuesPerCycle to 10 when zero
+      - R2.11: applyDefaults must set Cobbler.MaxMeasureIssues to 1 when zero
+      - R2.12: Generation.Cycles defaults to 0 (unlimited); a positive value acts as a safety limit on the number of cycles per run
+      - R2.13: applyDefaults must set Cobbler.EstimatedLinesMin to 250 when zero
+      - R2.14: applyDefaults must set Cobbler.EstimatedLinesMax to 350 when zero
+      - R2.15: applyDefaults must set Claude.MaxTimeSec to 300 when zero
+      - R2.16: applyDefaults must set Cobbler.HistoryDir to "history" when empty
+      - R2.17: applyDefaults must set Cobbler.DocTagPrefix to "v0." when empty
+      - R2.18: applyDefaults must set Cobbler.BaseBranch to "main" when empty
+      - R2.19: applyDefaults must set Claude.ContainerCredentialsPath to "/home/crumbs/.claude/.credentials.json" when empty
+      - R2.20: applyDefaults must set Podman.Image to "claude-cli" when empty
 
   R3:
     title: Logging
@@ -104,16 +126,41 @@ requirements:
       - R6.2: seedFiles must create files from SeedFiles templates, creating parent directories as needed
       - R6.3: seedFiles must execute templates with SeedData containing the generation name as Version
 
+  R7:
+    title: Code Implementation Status
+    items:
+      - R7.1: CodeStatus() must scan the tests/ directory for per-use-case subdirectories structured as tests/rel{version}/uc{number}/
+      - R7.2: CodeStatus() must count _test.go files in each use-case directory and report "implemented" when at least one is found, "not started" otherwise
+      - R7.3: CodeStatus() must compare each use case's roadmap spec status with its code status and detect gaps where spec is "done" but no test files are found
+      - R7.4: CodeStatus() must print a structured report to stdout grouped by release and exit non-zero when any gaps are found
+      - R7.5: The CodeStatusReport produced by CodeStatus() must be embedded in AnalysisDoc and written to {ScratchDir}/analysis.yaml before each measure/stitch cycle (see prd003)
+
+  R8:
+    title: Cross-Artifact Consistency Analysis
+    items:
+      - R8.1: Analyze() must load all PRDs, use cases, test suites, and road-map.yaml and check cross-artifact consistency
+      - R8.2: Analyze() must report orphaned PRDs (PRDs not referenced by any use case touchpoint)
+      - R8.3: Analyze() must report releases in road-map.yaml that have no corresponding test suite file
+      - R8.4: Analyze() must report broken touchpoints (touchpoints referencing PRD IDs that do not exist)
+      - R8.5: Analyze() must report use cases listed in docs/specs/use-cases/ that are not present in road-map.yaml
+      - R8.6: Analyze() must validate YAML schema conformance for PRDs, use cases, and test suites, reporting schema errors
+      - R8.7: Analyze() must detect constitution drift (prompt template YAML files that fail schema validation)
+      - R8.8: Analyze() must detect broken citations (code comments referencing non-existent PRD requirement IDs)
+      - R8.9: Analyze() must detect PRDs spanning multiple releases (a PRD whose requirements reference use cases from more than one release)
+      - R8.10: Analyze() must exit non-zero and print a summary when any violations are found; it must print "All consistency checks passed" and exit zero when clean
+
 non_goals:
   - This PRD does not define the generation lifecycle (see prd002)
   - This PRD does not define measure or stitch workflows (see prd003)
   - This PRD does not define metrics collection (see prd005)
 
 acceptance_criteria:
-  - Config struct includes all fields listed in R1 with YAML struct tags
+  - Config struct and its five sub-structs (ProjectConfig, GenerationConfig, CobblerConfig, PodmanConfig, ClaudeConfig) include all fields listed in R1 with YAML struct tags
   - New() returns a configured Orchestrator with defaults applied
   - NewFromFile() reads YAML and returns a configured Orchestrator
-  - LoadConfig resolves seed file paths and prompt file paths to content
+  - LoadConfig resolves seed file paths, prompt file paths, and constitution file paths to content
   - logf produces timestamped output with optional generation tag
   - Init and FullReset operate without errors on a clean repository
   - Seed files are created from templates with correct data
+  - CodeStatus() reports per-use-case test file presence and exits non-zero when spec-vs-code gaps exist
+  - Analyze() passes with zero violations on a consistent artifact set and exits non-zero when violations exist

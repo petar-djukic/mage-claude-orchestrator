@@ -20,9 +20,9 @@ requirements:
   R1:
     title: BinaryResolver Interface
     items:
-      - R1.1: We define a BinaryResolver interface with method Resolve(utility string) returning a binary path, a cleanup function, and an error
+      - R1.1: We define a BinaryResolver interface with two methods — Resolve(utility string) returning a binary path, a cleanup function, and an error; and ListUtilities() returning the list of available utility names for that source
       - R1.2: The cleanup function must be idempotent and safe to call multiple times
-      - R1.3: ResolverFromArg must select the correct resolver implementation based on the argument value
+      - R1.3: ResolverFromArg must select the correct resolver implementation based on the argument value; "gnu" returns GNUResolver, a path to an existing directory returns PathResolver, and anything else is treated as a git tag returning GitTagResolver
 
   R2:
     title: Git Tag Resolution
@@ -41,13 +41,22 @@ requirements:
       - R3.3: Moreutils must use unprefixed names (ts resolves to ts, sponge resolves to sponge)
       - R3.4: GNUResolver must return an error if the binary is not found on PATH
       - R3.5: The cleanup function for GNUResolver must be a no-op
+      - R3.6: GNUResolver.ListUtilities must scan the Homebrew coreutils gnubin directory and the moreutils utilities available on PATH
+
+  R3b:
+    title: Path-Based Resolution
+    items:
+      - R3b.1: PathResolver must resolve pre-built binaries from a local directory; given a utility name it returns the path to that binary in the directory
+      - R3b.2: PathResolver must return an error if the binary is not found in the directory
+      - R3b.3: The cleanup function for PathResolver must be a no-op
+      - R3b.4: PathResolver.ListUtilities must list all non-directory entries in the directory
 
   R4:
     title: Test Case Loading
     items:
-      - R4.1: We define a TestCase struct with fields for name, utility, stdin input, arguments, expected stdout, expected stderr, and expected exit code
-      - R4.2: LoadTestCases must read YAML test suite files from the specs directory
-      - R4.3: LoadTestCases must filter to test cases that have concrete inputs and expected outputs, skipping entries that only reference Go test functions
+      - R4.1: We define a CompareTestCase struct with fields for use_case, name, utility, stdin input, arguments, and expected outputs (stdout, stderr, exit_code)
+      - R4.2: LoadCompareTestCases must read YAML test suite files matching test-*.yaml from the specs directory
+      - R4.3: LoadCompareTestCases must filter to test cases that have concrete inputs and expected outputs, skipping entries that only reference Go test functions (go_test field only)
       - R4.4: FilterByUtility must return only test cases matching the specified utility name
 
   R5:

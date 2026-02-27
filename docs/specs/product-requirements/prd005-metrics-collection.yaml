@@ -12,6 +12,7 @@ goals:
   - G1: Collect per-invocation metrics (tokens, LOC, diff stats) and store them on beads issues
   - G2: Provide aggregate project statistics (Go LOC, documentation word counts)
   - G3: Support LOC snapshots before and after each Claude invocation
+  - G4: Enumerate context files by category and estimate prompt token cost
 
 requirements:
   R1:
@@ -30,7 +31,7 @@ requirements:
     title: LOC Snapshots
     items:
       - R2.1: captureLOC must return a LocSnapshot with Production and Test line counts
-      - R2.2: LOC counting must use the configured GoSourceDirs
+      - R2.2: LOC counting must walk from the repository root, skipping vendor/, .git/, the configured BinaryDir, and the configured MagefilesDir; all other .go files are counted
       - R2.3: Production LOC must exclude test files (*_test.go)
       - R2.4: Test LOC must count only test files (*_test.go)
       - R2.5: captureLOC must swallow errors (best-effort collection)
@@ -38,10 +39,10 @@ requirements:
   R3:
     title: Stats Collection
     items:
-      - R3.1: CollectStats must count Go production LOC across GoSourceDirs
-      - R3.2: CollectStats must count Go test LOC across GoSourceDirs
-      - R3.3: CollectStats must count documentation words using SpecGlobs patterns
-      - R3.4: Stats must print results in a human-readable format
+      - R3.1: CollectStats must count Go production LOC across the repository (per R2.2)
+      - R3.2: CollectStats must count Go test LOC across the repository (per R2.2)
+      - R3.3: CollectStats must count documentation words by discovering standard documentation files via resolveStandardFiles() and classifying them into categories (prd, use_case, test_suite); files in other categories are not counted
+      - R3.4: Stats must marshal results as YAML and print to stdout
 
   R4:
     title: Token Parsing
@@ -57,6 +58,15 @@ requirements:
       - R5.2: Diff stats must include files changed, insertions, and deletions
       - R5.3: gitDiffShortstat must parse the output of git diff --shortstat
 
+  R6:
+    title: Token Stats
+    items:
+      - R6.1: TokenStats must enumerate all files that buildProjectContext would load, grouped by category (prd, use_case, test_suite, source, extra, prompts)
+      - R6.2: TokenStats must report per-file path and byte size, per-category file counts and byte totals, and an overall total
+      - R6.3: TokenStats must build a measure prompt and report its size in bytes and an estimated token count (bytes / 4)
+      - R6.4: When ANTHROPIC_API_KEY is set, TokenStats must call the Anthropic Token Counting API for exact token counts and record the model used
+      - R6.5: TokenStats must marshal the report as YAML and print to stdout
+
 non_goals:
   - This PRD does not define dashboards or visualization of metrics
   - This PRD does not define historical trend analysis
@@ -66,6 +76,7 @@ non_goals:
 acceptance_criteria:
   - Every Claude invocation produces an InvocationRecord stored on the beads issue
   - LOC snapshots capture production and test counts before and after each invocation
-  - Stats prints Go LOC and documentation word counts
+  - Stats prints Go LOC and documentation word counts as YAML
   - Token parsing extracts input and output counts from Claude output
   - Diff stats capture files changed, insertions, and deletions per task
+  - TokenStats enumerates context files by category and reports estimated and optional exact prompt token counts

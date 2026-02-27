@@ -318,6 +318,21 @@ func TestBuildStitchPrompt_InvalidTemplate(t *testing.T) {
 	}
 }
 
+// --- cleanupWorktree ---
+
+func TestCleanupWorktree_NonExistentDir_NoOp(t *testing.T) {
+	// cleanupWorktree is called by resetTask, which the fix added to the
+	// buildStitchPrompt error path in doOneTask. When the worktreeDir does
+	// not exist (e.g., in test environments without a real git repo),
+	// cleanupWorktree must not panic; git errors are logged as warnings.
+	task := stitchTask{
+		id:          "test-cleanup",
+		worktreeDir: "/nonexistent/worktree/path",
+		branchName:  "stitch-test-cleanup",
+	}
+	cleanupWorktree(task) // must not panic
+}
+
 func TestBuildStitchPrompt_RequiredReadingFilter(t *testing.T) {
 	// When description contains required_reading with .go paths and a
 	// worktreeDir is set, the source file filter path is exercised.

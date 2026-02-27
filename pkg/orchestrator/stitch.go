@@ -404,6 +404,7 @@ func (o *Orchestrator) doOneTask(task stitchTask, baseBranch, repoRoot string) e
 	// Build and run prompt.
 	prompt, promptErr := o.buildStitchPrompt(task)
 	if promptErr != nil {
+		o.resetTask(task, "prompt build failure")
 		return promptErr
 	}
 	logf("doOneTask: prompt built, length=%d bytes", len(prompt))

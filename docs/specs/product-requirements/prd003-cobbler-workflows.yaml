@@ -19,7 +19,7 @@ requirements:
   R1:
     title: Workflow Configuration
     items:
-      - R1.1: Measure and stitch must read SilenceAgent, MaxIssues, UserPrompt, GenerationBranch, and TokenFile from Config (see prd001 R1.17-R1.23)
+      - R1.1: Measure and stitch must read SilenceAgent, MaxStitchIssuesPerCycle, MaxMeasureIssues, UserPrompt, GenerationBranch, and TokenFile from Config (see prd001 R1.16-R1.23)
       - R1.2: Measure and stitch must read ClaudeArgs from Config for Claude invocation arguments
       - R1.3: RunMeasure and RunStitch must take no parameters; all options come from Config
 
@@ -76,11 +76,12 @@ requirements:
       - R5.1: Default measure template must be embedded via go:embed from pkg/orchestrator/prompts/measure.tmpl
       - R5.2: Default stitch template must be embedded via go:embed from pkg/orchestrator/prompts/stitch.tmpl
       - R5.3: Custom templates from Config must override the embedded defaults
-      - R5.4: MeasurePromptData must provide ProjectContext (YAML blob of all docs, specs, source code, and issues), Limit, OutputPath, and UserInput
-      - R5.5: StitchPromptData must provide Title, ID, IssueType, Description, and ProjectContext (built from worktree)
-      - R5.6: MeasurePromptData must provide LinesMin and LinesMax from Config.EstimatedLinesMin and Config.EstimatedLinesMax
-      - R5.7: MeasurePromptData must provide PlanningConstitution (embedded or from Config override)
-      - R5.8: StitchPromptData must provide ExecutionConstitution (embedded or from Config override)
+      - R5.4: MeasurePromptDoc must provide ProjectContext (YAML blob of all docs, specs, source code, and issues), a Task field, Constraints, and OutputFormat assembled from the template and Config
+      - R5.5: StitchPromptDoc must provide Title, ID, IssueType, Description, and ProjectContext (built from worktree)
+      - R5.6: MeasurePromptDoc must include LinesMin and LinesMax from Config.EstimatedLinesMin and Config.EstimatedLinesMax embedded in the task text
+      - R5.7: MeasurePromptDoc must include PlanningConstitution and IssueFormatConstitution (embedded or from Config overrides) as yaml.Node fields
+      - R5.8: StitchPromptDoc must include ExecutionConstitution and GoStyleConstitution (embedded or from Config overrides) as yaml.Node fields
+      - R5.9: MeasurePromptDoc must include GoldenExample (from Config.Cobbler.GoldenExample) when set, injected into the measure prompt to guide Claude's issue format and granularity
 
   R6:
     title: Claude Invocation
@@ -99,12 +100,13 @@ requirements:
       - R6.13: runClaude must capture RawOutput (full stream-json bytes) for history saving
 
   R7:
-    title: Issue Import
+    title: Issue Import and Validation
     items:
       - R7.1: proposedIssue must include index (int), title (string), description (string), and dependency (int)
       - R7.2: importIssues must create tasks in beads for each proposed issue
       - R7.3: importIssues must wire dependencies using bd dep add for issues with dependency >= 0
       - R7.4: importIssues must commit beads changes after successful import
+      - R7.5: When Config.Cobbler.MaxRequirementsPerTask is greater than zero, measure must count the number of requirement items in each proposed issue's description and reject issues that exceed the limit; rejected issues must trigger a re-prompt (up to Config.Cobbler.MaxMeasureRetries attempts) instructing Claude to split them into smaller tasks
 
   R8:
     title: Pre-flight Checks
@@ -129,6 +131,17 @@ requirements:
       - R9.8: buildMeasurePrompt must load {CobblerConfig.Dir}/measure_context.yaml at invocation time and pass it to buildProjectContext
       - R9.9: buildStitchPrompt must load {CobblerConfig.Dir}/stitch_context.yaml at invocation time and pass it to buildProjectContext
       - R9.10: The orchestrator must log which context file was loaded or that fallback to Config was used
+
+  R10:
+    title: Pre-Cycle Analysis
+    items:
+      - R10.1: Before each measure/stitch cycle, the orchestrator must run RunPreCycleAnalysis() to produce a combined consistency and code-status snapshot
+      - R10.2: RunPreCycleAnalysis must invoke the cross-artifact consistency checker (see prd001 R8) and collect its results into an AnalysisDoc
+      - R10.3: RunPreCycleAnalysis must invoke CodeStatus (see prd001 R7) and include the report in the same AnalysisDoc
+      - R10.4: RunPreCycleAnalysis must write the AnalysisDoc as YAML to {CobblerConfig.Dir}/analysis.yaml
+      - R10.5: loadAnalysisDoc must load {CobblerConfig.Dir}/analysis.yaml and return nil when the file does not exist
+      - R10.6: buildProjectContext must include the AnalysisDoc content when analysis.yaml is present so Claude sees current project health in both measure and stitch prompts
+      - R10.7: Errors during RunPreCycleAnalysis must be logged and must not block the cycle; the analysis is advisory
 
 non_goals:
   - This PRD does not define the generation lifecycle (see prd002)

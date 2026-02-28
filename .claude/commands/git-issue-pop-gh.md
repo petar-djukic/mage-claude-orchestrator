@@ -103,19 +103,21 @@ git branch --show-current  # should show gh-<number>-<slug>
 
 When ALL sub-issues on the parent are closed:
 
-1. Verify all sub-issues are closed:
+1. If the issue is recurring (see Phase 6), execute Phase 6 now — before merging — so the next instance exists before this one closes.
+
+2. Verify all sub-issues are closed:
    ```bash
    gh api repos/<owner>/<repo>/issues/<number>/sub_issues \
      --jq '[.[] | select(.state=="open")] | length'
    ```
    If the count is not 0, do not proceed — report which sub-issues are still open.
 
-2. Push the final state of the feature branch:
+3. Push the final state of the feature branch:
    ```bash
    git push
    ```
 
-3. Open a pull request against `main`:
+4. Open a pull request against `main`:
    ```bash
    gh pr create --repo <owner>/<repo> \
      --base main \
@@ -147,23 +149,23 @@ When ALL sub-issues on the parent are closed:
 
    The `Closes #<number>` line auto-closes the parent GitHub issue when the PR merges.
 
-4. Merge the pull request and delete the remote feature branch:
+5. Merge the pull request and delete the remote feature branch:
    ```bash
    gh pr merge --repo <owner>/<repo> --merge --delete-branch
    ```
 
-5. Return to main and pull the merged changes:
+6. Return to main and pull the merged changes:
    ```bash
    git checkout main
    git pull origin main
    ```
 
-6. Delete the local feature branch (now merged):
+7. Delete the local feature branch (now merged):
    ```bash
    git branch -d gh-<number>-<slug>
    ```
 
-7. Verify the parent GitHub issue was closed by the merge:
+8. Verify the parent GitHub issue was closed by the merge:
    ```bash
    gh issue view <number> --repo <owner>/<repo> --json state -q .state
    ```
@@ -172,9 +174,7 @@ When ALL sub-issues on the parent are closed:
    gh issue close <number> --repo <owner>/<repo> --comment "Completed via PR #<pr-number>"
    ```
 
-8. Report the PR URL and confirm the issue is closed.
-
-9. If the issue is recurring (see Phase 6), execute Phase 6 now.
+9. Report the PR URL and confirm the issue is closed.
 
 **Note:** Phase 5 may happen in a later session. When running `/do-work-gh` and closing the last sub-issue, check the open sub-issue count and execute Phase 5 automatically if it reaches 0.
 

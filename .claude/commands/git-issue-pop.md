@@ -97,12 +97,14 @@ git branch --show-current  # should show gh-<number>-<slug>
 
 When ALL sub-issues in the epic are closed (check with `bd epic close-eligible`):
 
-1. Close the beads epic:
+1. If the issue is recurring (see Phase 6), execute Phase 6 now — before merging — so the next instance exists before this one closes.
+
+2. Close the beads epic:
    ```
    bd epic close-eligible
    ```
 
-2. Final commit on the feature branch:
+3. Final commit on the feature branch:
    ```
    bd sync
    git add -A
@@ -110,7 +112,7 @@ When ALL sub-issues in the epic are closed (check with `bd epic close-eligible`)
    git push
    ```
 
-3. Open a pull request against `main`:
+4. Open a pull request against `main`:
    ```bash
    gh pr create --repo <owner>/<repo> \
      --base main \
@@ -142,26 +144,26 @@ When ALL sub-issues in the epic are closed (check with `bd epic close-eligible`)
 
    The `Closes #<number>` line auto-closes the GitHub issue when the PR merges.
 
-4. Merge the pull request and delete the remote feature branch:
+5. Merge the pull request and delete the remote feature branch:
 
    ```bash
    gh pr merge --repo <owner>/<repo> --merge --delete-branch
    ```
 
-5. Return to main and pull the merged changes:
+6. Return to main and pull the merged changes:
 
    ```bash
    git checkout main
    git pull origin main
    ```
 
-6. Delete the local feature branch (now merged):
+7. Delete the local feature branch (now merged):
 
    ```bash
    git branch -d gh-<number>-<slug>
    ```
 
-7. Verify the GitHub issue was closed by the merge:
+8. Verify the GitHub issue was closed by the merge:
 
    ```bash
    gh issue view <number> --repo <owner>/<repo> --json state -q .state
@@ -173,9 +175,7 @@ When ALL sub-issues in the epic are closed (check with `bd epic close-eligible`)
    gh issue close <number> --repo <owner>/<repo> --comment "Completed via PR #<pr-number>"
    ```
 
-8. Report the PR URL and confirm the issue is closed.
-
-9. If the issue is recurring (see Phase 6), execute Phase 6 now.
+9. Report the PR URL and confirm the issue is closed.
 
 **Note:** Phase 5 may happen in a later session. When running `/do-work` and completing the last issue in an epic that has a `GH-` prefix in its title, check if the epic is close-eligible and execute Phase 5 automatically.
 

@@ -313,15 +313,19 @@ func (Compare) Run(argA, argB string) error {
 
 // --- Vscode targets ---
 
-// Push compiles the extension and installs it into VS Code.
-// Pass a profile name to target a specific VS Code profile (e.g., mage vscode:push GO).
-// Pass an empty string to install to the default profile.
-func (Vscode) Push(profile string) error { return newOrch().VscodePush(profile) }
+// Push compiles the extension and installs it into the default VS Code profile.
+func (Vscode) Push() error { return newOrch().VscodePush("") }
 
-// Pop uninstalls the extension from VS Code.
-// Pass a profile name to target a specific VS Code profile (e.g., mage vscode:pop GO).
-// Pass an empty string to uninstall from the default profile.
-func (Vscode) Pop(profile string) error { return newOrch().VscodePop(profile) }
+// PushProfile compiles the extension and installs it into a named VS Code profile
+// (e.g., mage vscode:pushProfile GO).
+func (Vscode) PushProfile(profile string) error { return newOrch().VscodePush(profile) }
+
+// Pop uninstalls the extension from the default VS Code profile.
+func (Vscode) Pop() error { return newOrch().VscodePop("") }
+
+// PopProfile uninstalls the extension from a named VS Code profile
+// (e.g., mage vscode:popProfile GO).
+func (Vscode) PopProfile(profile string) error { return newOrch().VscodePop(profile) }
 
 // --- Constitution targets ---
 

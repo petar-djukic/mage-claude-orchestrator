@@ -117,6 +117,10 @@ func (o *Orchestrator) RunStitchN(limit int) (int, error) {
 	}
 
 	totalTasks := 0
+	// failedTaskIDs tracks tasks that returned errTaskReset in this cycle.
+	// A task reset to open is immediately re-eligible in beads, so without
+	// this set the stitch loop retries the same task indefinitely.
+	failedTaskIDs := map[string]struct{}{}
 	for {
 		if limit > 0 && totalTasks >= limit {
 			logf("reached per-cycle limit (%d), pausing for measure", limit)
@@ -130,11 +134,19 @@ func (o *Orchestrator) RunStitchN(limit int) (int, error) {
 			break
 		}
 
+		// If this task already failed in the current cycle, stop. It was
+		// reset to open and will be retried in the next measure+stitch cycle.
+		if _, alreadyFailed := failedTaskIDs[task.id]; alreadyFailed {
+			logf("task %s already failed this cycle, stopping stitch", task.id)
+			break
+		}
+
 		taskStart := time.Now()
 		logf("executing task %d: id=%s title=%q", totalTasks+1, task.id, task.title)
 		if err := o.doOneTask(task, baseBranch, repoRoot); err != nil {
 			if errors.Is(err, errTaskReset) {
 				logf("task %s was reset after %s, continuing", task.id, time.Since(taskStart).Round(time.Second))
+				failedTaskIDs[task.id] = struct{}{}
 				continue
 			}
 			logf("task %s failed after %s: %v", task.id, time.Since(taskStart).Round(time.Second), err)

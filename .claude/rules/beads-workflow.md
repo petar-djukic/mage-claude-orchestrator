@@ -4,10 +4,6 @@
 
 **MIGRATION NOTE**: This project is migrating to the cupboard CLI for issue tracking. See `.claude/rules/cupboard-workflow.md` for the cupboard workflow. The beads (bd) commands documented below will be replaced by cupboard commands (e.g., `cupboard ready`, `cupboard show`, `cupboard close`). For new work, refer to cupboard-workflow.md.
 
-## Working Offline
-
-**We work offline.** There is no access to the remote repository. **Local git commit works** and is required; **do not run `git push`** (or `git pull`). The user will sync with the remote when they have network access.
-
 ## Do Not Edit Beads Files Directly
 
 **Never change files under `.beads/` by hand.** Do not edit `.beads/issues.jsonl` or any other file in `.beads/` with an editor or script. All issue creation, updates, comments, and status changes must go through the **bd** CLI (e.g. `bd update`, `bd comments add`, `bd close`, `bd sync`). Commits may include `.beads/` changes produced by `bd`; the agent must not modify those files directly.
@@ -94,13 +90,11 @@ bd close atlas-123
    git commit -m "descriptive message"
    git status  # Verify all changes committed
    ```
-   (Do not run `git push`; we have no remote access. Commit works locally.)
-5. **Clean up** - Clear stashes; skip remote operations (we are offline).
-6. **Verify** - All changes committed locally.
-7. **Hand off** - Provide context for next session; inform user that changes are committed locally and they can push when they have network access. **When summarizing changes in code or markdown**, run `mage stats` and include its output (Go production/test LOC, doc words) in the summary.
+5. **Clean up** - Clear stashes.
+6. **Verify** - All changes committed.
+7. **Hand off** - Provide context for next session. **When summarizing changes in code or markdown**, run `mage stats` and include its output (Go production/test LOC, doc words) in the summary.
 
 **CRITICAL RULES:**
-- Work is NOT complete until changes are committed locally
+- Work is NOT complete until changes are committed
 - NEVER leave uncommitted changes - commit everything
 - **After creating or editing any files** (docs, code, use cases, rules, config), run `git add -A` and `git commit` with a descriptive message **before ending your turn**. Do not hand off with uncommitted changes.
-- **We work offline** - Do not push; local commit is required and works. The user will push when they have network access.

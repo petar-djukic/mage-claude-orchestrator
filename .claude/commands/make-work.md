@@ -13,7 +13,7 @@ Read the following files to understand the project:
 
 First, check the current state of work:
 
-1. Run `bd list` to see existing epics and issues
+1. Run `gh issue list --repo <owner>/<repo>` to see open issues
 2. Check what's in progress, what's completed, what's pending
 3. **Check road-map.yaml** for release schedule and use case status
 4. **Run `mage analyze`** to identify specification issues:
@@ -54,13 +54,20 @@ When proposing issues (per crumb-format rule):
 
 Don't create any issues yet - just propose the breakdown so we can discuss it.
 
-After we agree on the plan and you create epics/issues:
+After we agree on the plan and you create issues:
 
-- **Create issues only via the bd CLI** (e.g. `bd create`). Do not edit `.beads/` files directly.
-- Run `bd sync`, then commit with a clear message (the commit will include `.beads/` changes produced by bd).
+- **Create issues with `gh issue create --repo <owner>/<repo>`**
+- To link a sub-issue to a parent, use:
+
+  ```bash
+  gh api repos/<owner>/<repo>/issues/<parent>/sub_issues \
+    --method POST \
+    --field sub_issue_id=$(gh api repos/<owner>/<repo>/issues/<sub-number> --jq '.id')
+  ```
 
 After you implement work:
 
 - Commit your changes with a clear message
-- Update issue status and log metrics via bd only (e.g. `bd comments add <id> "tokens: N, loc: X+Y"`, `bd close <id>`). Do not edit `.beads/` files.
-- File any new issues via bd; note them for the user if not created in this session
+- Log token usage: `gh issue comment <id> --repo <owner>/<repo> --body "tokens: N"`
+- Close completed issues: `gh issue close <id> --repo <owner>/<repo>`
+- File any new issues via `gh issue create`; note them for the user if not created in this session

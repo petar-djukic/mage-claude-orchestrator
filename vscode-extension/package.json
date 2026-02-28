@@ -80,7 +80,13 @@
       },
       {
         "command": "mageOrchestrator.previewConstitution",
-        "title": "Cobbler: Preview Constitution"
+        "title": "Cobbler: Preview Constitution",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "mageOrchestrator.previewSpec",
+        "title": "Cobbler: Preview Spec",
+        "icon": "$(open-preview)"
       }
     ],
     "viewsContainers": {
@@ -105,10 +111,25 @@
           "group": "comparison"
         }
       ],
-      "explorer/context": [
+      "editor/title": [
+        {
+          "command": "mageOrchestrator.previewSpec",
+          "when": "resourceExtname == .yaml && (resourcePath =~ /\\/docs\\/specs\\// || resourcePath =~ /\\/docs\\/engineering\\//)","group": "navigation"
+        },
         {
           "command": "mageOrchestrator.previewConstitution",
-          "when": "resourceExtname == .yaml",
+          "when": "resourceExtname == .yaml && resourcePath =~ /\\/docs\\/constitutions\\//",
+          "group": "navigation"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "mageOrchestrator.previewSpec",
+          "when": "resourceExtname == .yaml && (resourcePath =~ /\\/docs\\/specs\\// || resourcePath =~ /\\/docs\\/engineering\\//)","group": "navigation"
+        },
+        {
+          "command": "mageOrchestrator.previewConstitution",
+          "when": "resourceExtname == .yaml && resourcePath =~ /\\/docs\\/constitutions\\//",
           "group": "navigation"
         }
       ]

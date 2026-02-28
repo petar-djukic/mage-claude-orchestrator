@@ -19,7 +19,6 @@ import (
 const (
 	binNpm  = "npm"
 	binCode = "code"
-	binNpx  = "npx"
 )
 
 // vsCodeExtensionDir is the directory containing the VS Code extension source,
@@ -77,8 +76,12 @@ func (o *Orchestrator) VscodePush(profile string) error {
 	}
 
 	// Step 4: package as .vsix.
+	// Use the local node_modules/.bin/vsce binary directly rather than npx so
+	// that we are guaranteed to use the version installed by npm install above
+	// and avoid any npx resolution ambiguity when Dir differs from os.Getwd().
 	logf("vscode:push: packaging extension as %s", vsixName)
-	packageCmd := exec.Command(binNpx, "@vscode/vsce", "package", "--allow-missing-repository")
+	vscebin := filepath.Join(extDir, "node_modules", ".bin", "vsce")
+	packageCmd := exec.Command(vscebin, "package", "--allow-missing-repository")
 	packageCmd.Dir = extDir
 	packageCmd.Stdout = os.Stdout
 	packageCmd.Stderr = os.Stderr

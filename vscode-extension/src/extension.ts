@@ -19,6 +19,7 @@ import {
   GitRefContentProvider,
 } from "./comparisonBrowser";
 import { ConstitutionPreview } from "./constitutionPreview";
+import { SpecPreview } from "./specPreview";
 
 /** Output channel for error and diagnostic logging. */
 let outputChannel: vscode.OutputChannel;
@@ -234,6 +235,24 @@ export function activate(context: vscode.ExtensionContext): void {
             return;
           }
           constitutionPreview.show(targetUri);
+        }
+      )
+    );
+
+    // Spec and engineering YAML preview panel (prd006).
+    const specPreview = new SpecPreview();
+    context.subscriptions.push(
+      vscode.commands.registerCommand(
+        "mageOrchestrator.previewSpec",
+        (uri?: vscode.Uri) => {
+          const targetUri = uri ?? vscode.window.activeTextEditor?.document.uri;
+          if (!targetUri) {
+            vscode.window.showErrorMessage(
+              "Cobbler: no YAML file selected for preview"
+            );
+            return;
+          }
+          specPreview.show(targetUri);
         }
       )
     );

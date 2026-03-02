@@ -94,6 +94,25 @@ interfaces:
       - "Init(): initialize project (prd001)"
       - "FullReset(): reset cobbler and generator (prd001)"
       - "CobblerReset(): remove scratch directory (prd003)"
+      - "Compare(): differential comparison between two git references (prd004)"
+      - "CodeStatus(): report spec-vs-code gaps per use case and release (prd001)"
+      - "TokenStats(): enumerate context files and report token counts (prd005)"
+      - "CollectStats(): collect LOC and doc metrics programmatically (prd005)"
+      - "Outcomes(): parse and display outcome trailers from git history"
+      - "PrintContextFiles(): list files included in Claude prompts with sizes"
+      - "MeasurePrompt(): print assembled measure prompt to stdout"
+      - "DumpMeasurePrompt(): write measure prompt to stdout for debugging"
+      - "DumpStitchPrompt(): write stitch prompt to stdout for debugging"
+      - "Lint(): run golangci-lint on the project"
+      - "Install(): go install the project binary"
+      - "Clean(): remove build artifacts"
+      - "ExtractCredentials(): extract Claude credentials from macOS Keychain"
+      - "VscodePush(): build, package, and install VS Code extension"
+      - "VscodePop(): uninstall VS Code extension"
+      - "PodmanClean(): remove podman containers for the configured image"
+      - "ConstitutionPreviewFile(): render constitution YAML to markdown"
+      - "RunPreCycleAnalysis(): write analysis.yaml before each measure/stitch cycle"
+      - "PrepareTestRepo(): download and scaffold a test repository for E2E tests"
 
   - name: Prompt Templates
     summary: |
@@ -180,15 +199,33 @@ components:
 
   - name: Commands
     responsibility: |
-      Wrapper functions for external tools. Functions wrapping git, GitHub CLI (gh), and
-      Go CLI commands. Centralizes binary names as constants and provides structured access
-      to command output.
+      Wrapper functions for external tools. Functions wrapping git and Go CLI commands.
+      Centralizes binary names as constants and provides structured access to command
+      output.
     capabilities:
       - Git operations (branch, worktree, tag, merge, diff)
-      - GitHub CLI operations (issue create, close, label, list via REST API)
       - Go toolchain operations (build, vet)
     references:
       - prd001-orchestrator-core
+
+  - name: GitHub Issues
+    responsibility: |
+      Manages GitHub Issues as the task tracker for cobbler workflows. Provides issue
+      CRUD operations (create, list, close), label management (cobbler-ready,
+      cobbler-in-progress, cobbler-gen-* generation labels), DAG-based promotion of
+      ready issues, and garbage collection of stale generation issues whose branches
+      no longer exist locally.
+    capabilities:
+      - Create cobbler issues with YAML front-matter (generation, index, dependency)
+      - List open issues filtered by generation label via REST API
+      - Promote unblocked issues to cobbler-ready based on dependency DAG
+      - Pick lowest-numbered ready issue and mark in-progress
+      - Close issues and re-promote dependents
+      - Garbage-collect stale generation issues in a single bulk API call
+      - File defects in target repos
+    references:
+      - prd003-cobbler-workflows
+      - Design decision 5 (GitHub Issues for task tracking)
 
   - name: Stats
     responsibility: |
@@ -379,6 +416,33 @@ components:
       - Estimate token counts from byte size (len/4 heuristic)
       - Call Anthropic Token Counting API for exact counts when ANTHROPIC_API_KEY is set
     references:
+      - prd005-metrics-collection
+
+  - name: Outcomes
+    responsibility: |
+      Parses outcome trailers from git commit messages written by stitch tasks.
+      Trailers record token usage, LOC deltas, cost, and duration per task.
+      The Outcomes() method (mage stats:outcomes) scans all branches and prints
+      a summary table to stdout.
+    capabilities:
+      - Parse outcome trailers from git log output
+      - Extract branch names from commit ref decorations
+      - Format summary table with token counts, cost, LOC deltas, and duration
+    references:
+      - prd005-metrics-collection
+
+  - name: Prompt Files
+    responsibility: |
+      Enumerates all files that buildProjectContext loads, annotated with source
+      (default vs config), category, line count, and estimated token count. Mirrors
+      the include/exclude logic of context assembly so that stats:tokens and
+      prompt:files report the same file set. Exposed as mage prompt:files.
+    capabilities:
+      - Resolve default and config-driven documentation files with exclusion support
+      - Resolve extra context sources and Go source files
+      - Print annotated file list with token estimates
+    references:
+      - prd003-cobbler-workflows
       - prd005-metrics-collection
 
   - name: VS Code Extension
@@ -585,7 +649,9 @@ project_structure:
   - path: pkg/orchestrator/generator.go
     role: Generation lifecycle — start/run/resume/stop/reset
   - path: pkg/orchestrator/commands.go
-    role: Git, gh, Go command wrappers
+    role: Git, Go command wrappers
+  - path: pkg/orchestrator/issues_gh.go
+    role: GitHub Issues management — create, list, close, label, GC stale generation issues
   - path: pkg/orchestrator/stats.go
     role: LOC and documentation metrics
   - path: pkg/orchestrator/analyze.go
@@ -612,8 +678,14 @@ project_structure:
     role: Prompt document types (MeasurePromptDoc, StitchPromptDoc), template parsing, placeholder substitution
   - path: pkg/orchestrator/codestatus.go
     role: Code implementation status — scan tests/ for use-case test directories, compare roadmap spec status with test file presence, detect spec-vs-code gaps
+  - path: pkg/orchestrator/compare.go
+    role: Cross-generation differential comparison — binary resolution, build, and Compare() entry point (prd004 R1-R3)
   - path: pkg/orchestrator/testloader.go
     role: YAML test suite loader and differential binary runner for cross-generation comparison (prd004 R4-R6)
+  - path: pkg/orchestrator/outcomes.go
+    role: Outcome trailer parsing — scan git history for task metrics (tokens, LOC, cost, duration)
+  - path: pkg/orchestrator/prompt_files.go
+    role: Context file enumeration — list files included in Claude prompts with sizes and token estimates
   - path: pkg/orchestrator/token_stats.go
     role: Token statistics — enumerate context files by category with byte sizes, optional Anthropic Token Counting API for exact prompt token counts
   - path: pkg/orchestrator/Dockerfile.claude

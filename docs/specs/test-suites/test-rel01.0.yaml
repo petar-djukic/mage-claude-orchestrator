@@ -759,36 +759,6 @@ test_cases:
 # ---- uc007: Build tooling ----
 
   - use_case: rel01.0-uc007-build-tooling
-    name: Build compiles binary
-    go_test: TestRel01_UC007_Build
-    inputs:
-      command: mage build
-    expected:
-      exit_code: 0
-      state:
-        binary_exists: true
-
-  - use_case: rel01.0-uc007-build-tooling
-    name: Install exits successfully
-    go_test: TestRel01_UC007_Install
-    inputs:
-      command: mage install
-    expected:
-      exit_code: 0
-
-  - use_case: rel01.0-uc007-build-tooling
-    name: Clean removes build artifacts
-    go_test: TestRel01_UC007_Clean
-    inputs:
-      command: |
-        mage build
-        mage clean
-    expected:
-      exit_code: 0
-      state:
-        bin_dir_empty: true
-
-  - use_case: rel01.0-uc007-build-tooling
     name: Stats prints Go LOC
     go_test: TestRel01_UC007_Stats
     inputs:

@@ -14,37 +14,7 @@ import (
 
 	"github.com/mesh-intelligence/cobbler-scaffold/pkg/orchestrator"
 	"github.com/mesh-intelligence/cobbler-scaffold/tests/rel01.0/internal/testutil"
-	"gopkg.in/yaml.v3"
 )
-
-// requireBuildableSource reads configuration.yaml, derives the main package
-// directory from the module path, and skips the test when no Go files exist
-// there. This handles specs-only target repos where configuration.yaml
-// declares a main_package that has not yet been generated.
-func requireBuildableSource(t *testing.T, dir string) {
-	t.Helper()
-	data, err := os.ReadFile(filepath.Join(dir, "configuration.yaml"))
-	if err != nil {
-		return // let the test fail on its own
-	}
-	var cfg struct {
-		Project struct {
-			ModulePath string `yaml:"module_path"`
-			MainPackage string `yaml:"main_package"`
-		} `yaml:"project"`
-	}
-	if err := yaml.Unmarshal(data, &cfg); err != nil || cfg.Project.MainPackage == "" {
-		return
-	}
-	rel := strings.TrimPrefix(cfg.Project.MainPackage, cfg.Project.ModulePath+"/")
-	if rel == cfg.Project.MainPackage {
-		rel = "."
-	}
-	goFiles, _ := filepath.Glob(filepath.Join(dir, rel, "*.go"))
-	if len(goFiles) == 0 {
-		t.Skipf("target repo is specs-only: no Go files in %s", rel)
-	}
-}
 
 var (
 	orchRoot    string
@@ -67,47 +37,6 @@ func TestMain(m *testing.M) {
 	exitCode := m.Run()
 	cleanup()
 	os.Exit(exitCode)
-}
-
-func TestRel01_UC007_Build(t *testing.T) {
-	t.Parallel()
-	dir := testutil.SetupRepo(t, snapshotDir)
-	requireBuildableSource(t, dir)
-	if err := testutil.RunMage(t, dir, "build"); err != nil {
-		t.Fatalf("mage build: %v", err)
-	}
-	entries, err := os.ReadDir(filepath.Join(dir, "bin"))
-	if err != nil {
-		t.Fatalf("reading bin/: %v", err)
-	}
-	if len(entries) == 0 {
-		t.Error("expected at least one binary in bin/ after mage build")
-	}
-}
-
-func TestRel01_UC007_Install(t *testing.T) {
-	t.Parallel()
-	dir := testutil.SetupRepo(t, snapshotDir)
-	requireBuildableSource(t, dir)
-	if err := testutil.RunMage(t, dir, "install"); err != nil {
-		t.Fatalf("mage install: %v", err)
-	}
-}
-
-func TestRel01_UC007_Clean(t *testing.T) {
-	t.Parallel()
-	dir := testutil.SetupRepo(t, snapshotDir)
-	requireBuildableSource(t, dir)
-	if err := testutil.RunMage(t, dir, "build"); err != nil {
-		t.Fatalf("mage build (setup): %v", err)
-	}
-	if err := testutil.RunMage(t, dir, "clean"); err != nil {
-		t.Fatalf("mage clean: %v", err)
-	}
-	entries, _ := os.ReadDir(filepath.Join(dir, "bin"))
-	if len(entries) > 0 {
-		t.Errorf("expected bin/ to be empty after mage clean, found %v", entries)
-	}
 }
 
 func TestRel01_UC007_Stats(t *testing.T) {

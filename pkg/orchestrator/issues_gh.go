@@ -499,8 +499,9 @@ func gcStaleGenerationIssues(repo, generationPrefix string) {
 	}
 }
 
-// listActiveIssuesContext returns a human-readable summary of all open
-// issues for the generation, suitable for injection into the measure prompt.
+// listActiveIssuesContext returns a JSON array of ContextIssue objects for all
+// open issues in the generation, suitable for injection into the measure prompt.
+// The JSON format matches what parseIssuesJSON expects.
 func listActiveIssuesContext(repo, generation string) (string, error) {
 	issues, err := listOpenCobblerIssues(repo, generation)
 	if err != nil {
@@ -509,20 +510,32 @@ func listActiveIssuesContext(repo, generation string) (string, error) {
 	if len(issues) == 0 {
 		return "", nil
 	}
-
 	sort.Slice(issues, func(i, j int) bool { return issues[i].Index < issues[j].Index })
+	return issuesContextJSON(issues)
+}
 
-	var sb strings.Builder
-	for _, iss := range issues {
+// issuesContextJSON converts a slice of cobblerIssue into the JSON string
+// expected by parseIssuesJSON. Exported for testing.
+func issuesContextJSON(issues []cobblerIssue) (string, error) {
+	ctx := make([]ContextIssue, len(issues))
+	for i, iss := range issues {
 		status := "backfill"
 		if hasLabel(iss, cobblerLabelInProgress) {
 			status = "in_progress"
 		} else if hasLabel(iss, cobblerLabelReady) {
 			status = "ready"
 		}
-		fmt.Fprintf(&sb, "#%d (index=%d, status=%s): %s\n", iss.Number, iss.Index, status, iss.Title)
+		ctx[i] = ContextIssue{
+			ID:     fmt.Sprintf("%d", iss.Number),
+			Title:  iss.Title,
+			Status: status,
+		}
 	}
-	return sb.String(), nil
+	b, err := json.Marshal(ctx)
+	if err != nil {
+		return "", fmt.Errorf("issuesContextJSON: %w", err)
+	}
+	return string(b), nil
 }
 
 // addIssueLabel adds a label to a GitHub issue via the API.

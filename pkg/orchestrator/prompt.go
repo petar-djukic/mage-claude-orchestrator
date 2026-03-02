@@ -24,6 +24,7 @@ type MeasurePromptDoc struct {
 	OutputFormat            string          `yaml:"output_format"`
 	GoldenExample           string          `yaml:"golden_example,omitempty"`
 	AdditionalContext       string          `yaml:"additional_context,omitempty"`
+	ValidationErrors        []string        `yaml:"validation_errors,omitempty"`
 }
 
 // StitchPromptDoc is the complete stitch prompt as a YAML document.

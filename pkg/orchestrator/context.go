@@ -863,7 +863,11 @@ func parseIssuesJSON(jsonStr string) []ContextIssue {
 	}
 	var issues []ContextIssue
 	if err := json.Unmarshal([]byte(jsonStr), &issues); err != nil {
-		logf("parseIssuesJSON: parse error: %v", err)
+		preview := jsonStr
+		if len(preview) > 80 {
+			preview = preview[:80]
+		}
+		logf("WARN parseIssuesJSON: unmarshal failed (%v); input preview: %q", err, preview)
 		return nil
 	}
 	return issues

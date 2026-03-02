@@ -4,8 +4,10 @@
 package orchestrator
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -507,5 +509,76 @@ func TestDAGPromotion_AllDepsResolved(t *testing.T) {
 		if iss.Number == 21 && !blocked {
 			t.Error("issue #21 (dep 3 still open) should be blocked")
 		}
+	}
+}
+
+func TestIssuesContextJSON_Empty(t *testing.T) {
+	t.Parallel()
+	result, err := issuesContextJSON(nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result != "[]" {
+		t.Errorf("issuesContextJSON(nil) = %q, want %q", result, "[]")
+	}
+}
+
+func TestIssuesContextJSON_StatusMapping(t *testing.T) {
+	t.Parallel()
+	issues := []cobblerIssue{
+		{Number: 10, Title: "Task A", Labels: []string{cobblerLabelReady}},
+		{Number: 11, Title: "Task B", Labels: []string{cobblerLabelInProgress}},
+		{Number: 12, Title: "Task C", Labels: []string{}},
+	}
+	result, err := issuesContextJSON(issues)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var got []ContextIssue
+	if err := json.Unmarshal([]byte(result), &got); err != nil {
+		t.Fatalf("issuesContextJSON produced invalid JSON: %v\noutput: %s", err, result)
+	}
+	if len(got) != 3 {
+		t.Fatalf("got %d issues, want 3", len(got))
+	}
+
+	cases := []struct{ id, title, status string }{
+		{"10", "Task A", "ready"},
+		{"11", "Task B", "in_progress"},
+		{"12", "Task C", "backfill"},
+	}
+	for i, c := range cases {
+		if got[i].ID != c.id {
+			t.Errorf("[%d] ID = %q, want %q", i, got[i].ID, c.id)
+		}
+		if got[i].Title != c.title {
+			t.Errorf("[%d] Title = %q, want %q", i, got[i].Title, c.title)
+		}
+		if got[i].Status != c.status {
+			t.Errorf("[%d] Status = %q, want %q", i, got[i].Status, c.status)
+		}
+	}
+}
+
+func TestIssuesContextJSON_ParseableByParseIssuesJSON(t *testing.T) {
+	t.Parallel()
+	issues := []cobblerIssue{
+		{Number: 115, Title: "cmd/wc core implementation", Labels: []string{cobblerLabelReady}},
+	}
+	jsonStr, err := issuesContextJSON(issues)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Verify the output is parseable by parseIssuesJSON (the function that was broken).
+	parsed := parseIssuesJSON(jsonStr)
+	if len(parsed) != 1 {
+		t.Fatalf("parseIssuesJSON returned %d issues, want 1; input: %s", len(parsed), jsonStr)
+	}
+	if parsed[0].ID != "115" {
+		t.Errorf("ID = %q, want %q", parsed[0].ID, "115")
+	}
+	if !strings.Contains(jsonStr, "cmd/wc core implementation") {
+		t.Errorf("JSON does not contain expected title: %s", jsonStr)
 	}
 }

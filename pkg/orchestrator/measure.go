@@ -178,6 +178,7 @@ func (o *Orchestrator) RunMeasure() error {
 
 		var createdIDs []string
 		var lastOutputFile string
+		var lastValidationErrors []string // errors from previous attempt, fed back into retry prompt
 
 		// Attempt loop: try Claude + import, retrying on validation failure.
 		for attempt := 0; attempt <= maxRetries; attempt++ {
@@ -190,7 +191,7 @@ func (o *Orchestrator) RunMeasure() error {
 			outputFile := filepath.Join(o.cfg.Cobbler.Dir, fmt.Sprintf("measure-%s.yaml", timestamp))
 			lastOutputFile = outputFile
 
-			prompt, promptErr := o.buildMeasurePrompt(o.cfg.Cobbler.UserPrompt, existingIssues, 1)
+			prompt, promptErr := o.buildMeasurePrompt(o.cfg.Cobbler.UserPrompt, existingIssues, 1, lastValidationErrors...)
 			if promptErr != nil {
 				return promptErr
 			}
@@ -263,12 +264,14 @@ func (o *Orchestrator) RunMeasure() error {
 			logf("iteration %d extracted YAML, size=%d bytes", i+1, len(yamlContent))
 
 			var importErr error
-			createdIDs, importErr = o.importIssues(outputFile, repo, generation)
+			var validationErrs []string
+			createdIDs, validationErrs, importErr = o.importIssues(outputFile, repo, generation)
 			if importErr != nil {
 				logf("iteration %d import failed: %v", i+1, importErr)
 				if attempt < maxRetries {
-					_ = os.Remove(outputFile) // best-effort cleanup before retry
-					continue                  // retry
+					lastValidationErrors = validationErrs // feed errors back into next prompt
+					_ = os.Remove(outputFile)             // best-effort cleanup before retry
+					continue                              // retry
 				}
 				// Retries exhausted: accept with warning (R5).
 				logf("iteration %d retries exhausted, accepting last result with warnings", i+1)
@@ -308,7 +311,7 @@ func truncateSHA(sha string) string {
 	return sha
 }
 
-func (o *Orchestrator) buildMeasurePrompt(userInput, existingIssues string, limit int) (string, error) {
+func (o *Orchestrator) buildMeasurePrompt(userInput, existingIssues string, limit int, validationErrors ...string) (string, error) {
 	tmpl, err := parsePromptTemplate(orDefault(o.cfg.Cobbler.MeasurePrompt, defaultMeasurePrompt))
 	if err != nil {
 		return "", fmt.Errorf("measure prompt YAML: %w", err)
@@ -351,6 +354,7 @@ func (o *Orchestrator) buildMeasurePrompt(userInput, existingIssues string, limi
 		OutputFormat:            substitutePlaceholders(tmpl.OutputFormat, placeholders),
 		GoldenExample:           o.cfg.Cobbler.GoldenExample,
 		AdditionalContext:       userInput,
+		ValidationErrors:        validationErrors,
 	}
 
 	// Enforce releases scope: the roadmap is not filtered by release, so
@@ -394,28 +398,32 @@ type proposedIssue struct {
 	Dependency  int    `yaml:"dependency"`
 }
 
-func (o *Orchestrator) importIssues(yamlFile, repo, generation string) ([]string, error) {
+// importIssues imports proposed issues from a YAML file into GitHub. It returns
+// the created issue IDs, any validation error strings (for retry feedback), and
+// a non-nil error when validation fails in enforcing mode.
+func (o *Orchestrator) importIssues(yamlFile, repo, generation string) ([]string, []string, error) {
 	return o.importIssuesImpl(yamlFile, repo, generation, false)
 }
 
 // importIssuesForce imports issues bypassing enforcing validation. Used when
 // retries are exhausted to accept the last result with warnings (R5).
 func (o *Orchestrator) importIssuesForce(yamlFile, repo, generation string) ([]string, error) {
-	return o.importIssuesImpl(yamlFile, repo, generation, true)
+	ids, _, err := o.importIssuesImpl(yamlFile, repo, generation, true)
+	return ids, err
 }
 
-func (o *Orchestrator) importIssuesImpl(yamlFile, repo, generation string, skipEnforcement bool) ([]string, error) {
+func (o *Orchestrator) importIssuesImpl(yamlFile, repo, generation string, skipEnforcement bool) ([]string, []string, error) {
 	logf("importIssues: reading %s", yamlFile)
 	data, err := os.ReadFile(yamlFile)
 	if err != nil {
-		return nil, fmt.Errorf("reading YAML file: %w", err)
+		return nil, nil, fmt.Errorf("reading YAML file: %w", err)
 	}
 	logf("importIssues: read %d bytes", len(data))
 
 	var issues []proposedIssue
 	if err := yaml.Unmarshal(data, &issues); err != nil {
 		logf("importIssues: YAML parse error: %v", err)
-		return nil, fmt.Errorf("parsing YAML: %w", err)
+		return nil, nil, fmt.Errorf("parsing YAML: %w", err)
 	}
 
 	logf("importIssues: parsed %d proposed issue(s)", len(issues))
@@ -431,7 +439,7 @@ func (o *Orchestrator) importIssuesImpl(yamlFile, repo, generation string, skipE
 		logf("importIssues: %d warning(s)", len(vr.Warnings))
 	}
 	if vr.HasErrors() && o.cfg.Cobbler.EnforceMeasureValidation && !skipEnforcement {
-		return nil, fmt.Errorf("measure validation failed (%d error(s)): %s",
+		return nil, vr.Errors, fmt.Errorf("measure validation failed (%d error(s)): %s",
 			len(vr.Errors), strings.Join(vr.Errors, "; "))
 	}
 
@@ -459,7 +467,7 @@ func (o *Orchestrator) importIssuesImpl(yamlFile, repo, generation string, skipE
 	// Append new issues to the persistent measure list.
 	appendMeasureLog(o.cfg.Cobbler.Dir, issues)
 
-	return ids, nil
+	return ids, nil, nil
 }
 
 // issueDescription is the subset of fields parsed from an issue description

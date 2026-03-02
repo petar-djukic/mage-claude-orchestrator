@@ -1002,7 +1002,7 @@ func TestBuildMeasurePrompt_WithExistingIssues(t *testing.T) {
 	t.Parallel()
 	o := New(Config{})
 
-	existingIssues := `[{"number":42,"title":"Existing task","state":"open"}]`
+	existingIssues := `[{"id":"42","title":"Existing task","status":"ready","type":""}]`
 	prompt, err := o.buildMeasurePrompt("", existingIssues, 1)
 	if err != nil {
 		t.Fatalf("buildMeasurePrompt() error = %v", err)
@@ -1062,7 +1062,7 @@ func TestBuildMeasurePrompt_GoldenExample(t *testing.T) {
 func TestImportIssuesImpl_NonexistentFile(t *testing.T) {
 	t.Parallel()
 	o := New(Config{})
-	_, err := o.importIssuesImpl("/nonexistent/file.yaml", "owner/repo", "gen", false)
+	_, _, err := o.importIssuesImpl("/nonexistent/file.yaml", "owner/repo", "gen", false)
 	if err == nil {
 		t.Error("expected error for nonexistent file")
 	}
@@ -1075,7 +1075,7 @@ func TestImportIssuesImpl_InvalidYAML(t *testing.T) {
 	os.WriteFile(yamlFile, []byte("{{{not valid yaml"), 0o644)
 
 	o := New(Config{})
-	_, err := o.importIssuesImpl(yamlFile, "owner/repo", "gen", false)
+	_, _, err := o.importIssuesImpl(yamlFile, "owner/repo", "gen", false)
 	if err == nil {
 		t.Error("expected error for invalid YAML")
 	}
@@ -1095,7 +1095,7 @@ func TestImportIssuesImpl_EmptyIssueList(t *testing.T) {
 	o := New(cfg)
 
 	// Empty list should not error — no issues to create, no GitHub calls.
-	ids, err := o.importIssuesImpl(yamlFile, "owner/repo", "gen", false)
+	ids, _, err := o.importIssuesImpl(yamlFile, "owner/repo", "gen", false)
 	if err != nil {
 		t.Fatalf("importIssuesImpl() error = %v", err)
 	}
@@ -1130,12 +1130,15 @@ acceptance_criteria:
 	cfg.Cobbler.EnforceMeasureValidation = true
 	o := New(cfg)
 
-	_, err := o.importIssuesImpl(yamlFile, "owner/repo", "gen", false)
+	_, validationErrs, err := o.importIssuesImpl(yamlFile, "owner/repo", "gen", false)
 	if err == nil {
 		t.Error("expected validation error in enforcing mode")
 	}
 	if !strings.Contains(err.Error(), "validation failed") {
 		t.Errorf("error should mention validation, got: %v", err)
+	}
+	if len(validationErrs) == 0 {
+		t.Error("expected non-empty validationErrs slice when validation fails")
 	}
 }
 
@@ -1168,7 +1171,7 @@ acceptance_criteria:
 	// skipEnforcement=true should bypass validation errors.
 	// This will fail at createCobblerIssue (no real GitHub), but should NOT
 	// fail at validation.
-	ids, err := o.importIssuesImpl(yamlFile, "owner/repo", "gen", true)
+	ids, _, err := o.importIssuesImpl(yamlFile, "owner/repo", "gen", true)
 	if err != nil {
 		t.Fatalf("importIssuesImpl() with skipEnforcement should not return validation error, got: %v", err)
 	}
@@ -1193,6 +1196,43 @@ func TestMeasurePrompt_ProducesOutput(t *testing.T) {
 	err := o.MeasurePrompt()
 	if err != nil {
 		t.Errorf("MeasurePrompt() unexpected error: %v", err)
+	}
+}
+
+func TestBuildMeasurePrompt_WithValidationErrors(t *testing.T) {
+	t.Parallel()
+	o := New(Config{})
+
+	errs := []string{
+		`[1] "My task": requirement count 9 outside P9 range 5-8`,
+		`[1] "My task": design decision count 2 outside P9 range 3-5`,
+	}
+	prompt, err := o.buildMeasurePrompt("", "", 1, errs...)
+	if err != nil {
+		t.Fatalf("buildMeasurePrompt() error = %v", err)
+	}
+	if !strings.Contains(prompt, "validation_errors:") {
+		t.Error("prompt should contain validation_errors key")
+	}
+	if !strings.Contains(prompt, "requirement count 9") {
+		t.Error("prompt should contain first validation error")
+	}
+	if !strings.Contains(prompt, "design decision count 2") {
+		t.Error("prompt should contain second validation error")
+	}
+}
+
+func TestBuildMeasurePrompt_NoValidationErrorsOnFirstAttempt(t *testing.T) {
+	t.Parallel()
+	o := New(Config{})
+
+	// No validation errors passed — field must be absent from the YAML output.
+	prompt, err := o.buildMeasurePrompt("", "", 1)
+	if err != nil {
+		t.Fatalf("buildMeasurePrompt() error = %v", err)
+	}
+	if strings.Contains(prompt, "validation_errors:") {
+		t.Error("prompt must not contain validation_errors on first attempt (no errors)")
 	}
 }
 

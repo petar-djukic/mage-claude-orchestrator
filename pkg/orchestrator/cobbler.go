@@ -671,27 +671,27 @@ func worktreeBasePath() string {
 }
 
 // hasOpenIssues returns true if there are open orchestrator issues for the
-// current generation on GitHub.
-func (o *Orchestrator) hasOpenIssues() bool {
+// current generation on GitHub. Returns an error if the check cannot be
+// performed (API failure, missing repo, etc.) so callers can distinguish
+// "no issues" from "unable to check".
+func (o *Orchestrator) hasOpenIssues() (bool, error) {
 	repoRoot, err := os.Getwd()
 	if err != nil {
-		return false
+		return false, fmt.Errorf("getwd: %w", err)
 	}
 	ghRepo, err := detectGitHubRepo(repoRoot, o.cfg)
 	if err != nil {
-		logf("hasOpenIssues: detectGitHubRepo: %v", err)
-		return false
+		return false, fmt.Errorf("detectGitHubRepo: %w", err)
 	}
 	branch, err := gitCurrentBranch(".")
 	if err != nil {
-		return false
+		return false, fmt.Errorf("gitCurrentBranch: %w", err)
 	}
 	issues, err := listOpenCobblerIssues(ghRepo, branch)
 	if err != nil {
-		logf("hasOpenIssues: listOpenCobblerIssues: %v", err)
-		return false
+		return false, fmt.Errorf("listOpenCobblerIssues: %w", err)
 	}
-	return len(issues) > 0
+	return len(issues) > 0, nil
 }
 
 // CobblerReset removes the cobbler scratch directory.

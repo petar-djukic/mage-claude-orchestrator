@@ -234,7 +234,10 @@ func TestCleanupWorktree_NonExistentDir_NoOp(t *testing.T) {
 		worktreeDir: "/nonexistent/worktree/path",
 		branchName:  "stitch-test-cleanup",
 	}
-	cleanupWorktree(task) // must not panic
+	ok := cleanupWorktree(task) // must not panic
+	if ok {
+		t.Error("cleanupWorktree should return false for non-existent worktree")
+	}
 }
 
 func TestBuildStitchPrompt_RepositoryFiles(t *testing.T) {
@@ -733,7 +736,10 @@ func TestCleanupWorktree_RealWorktree(t *testing.T) {
 		worktreeDir: worktreeDir,
 	}
 
-	cleanupWorktree(task)
+	ok := cleanupWorktree(task)
+	if !ok {
+		t.Error("cleanupWorktree should return true for successful removal")
+	}
 
 	// Worktree directory should be removed.
 	if _, err := os.Stat(worktreeDir); !os.IsNotExist(err) {
@@ -742,6 +748,71 @@ func TestCleanupWorktree_RealWorktree(t *testing.T) {
 	// Branch should be deleted.
 	if gitBranchExists(branchName, "") {
 		t.Errorf("branch %q should have been deleted", branchName)
+	}
+}
+
+// --- createWorktree ---
+
+func TestCreateWorktree_Success(t *testing.T) {
+	dir := initTestGitRepo(t)
+
+	worktreeDir := filepath.Join(dir+"-worktrees", "wt-create")
+	task := stitchTask{
+		id:          "12345",
+		branchName:  "task/main-12345",
+		worktreeDir: worktreeDir,
+	}
+
+	err := createWorktree(task)
+	if err != nil {
+		t.Fatalf("createWorktree failed: %v", err)
+	}
+
+	// Worktree directory should exist.
+	if _, err := os.Stat(worktreeDir); os.IsNotExist(err) {
+		t.Error("worktree directory should exist after creation")
+	}
+
+	// Branch should exist.
+	if !gitBranchExists(task.branchName, ".") {
+		t.Error("branch should exist after createWorktree")
+	}
+
+	// Cleanup.
+	cleanupWorktree(task)
+}
+
+func TestCreateWorktree_InvalidParentDir(t *testing.T) {
+	t.Parallel()
+	task := stitchTask{
+		id:          "88888",
+		branchName:  "task/main-88888",
+		worktreeDir: "/dev/null/impossible/path",
+	}
+
+	err := createWorktree(task)
+	if err == nil {
+		t.Error("expected error for impossible parent directory")
+	}
+}
+
+// --- resetOrphanedIssues (unit logic via branch check) ---
+
+func TestResetOrphanedIssues_NoBranch(t *testing.T) {
+	// Tests the branch existence check logic that resetOrphanedIssues uses.
+	// The full function calls listOpenCobblerIssues (gh API), so we test
+	// the branch-checking portion via gitBranchExists directly.
+	_ = initTestGitRepo(t)
+
+	// Branch does not exist → gitBranchExists returns false.
+	if gitBranchExists("task/main-nonexistent", ".") {
+		t.Error("non-existent branch should not exist")
+	}
+
+	// Create a branch → exists.
+	gitRun(t, "branch", "task/main-99999")
+	if !gitBranchExists("task/main-99999", ".") {
+		t.Error("created branch should exist")
 	}
 }
 

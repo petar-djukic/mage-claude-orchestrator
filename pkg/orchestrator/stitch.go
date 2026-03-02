@@ -742,17 +742,23 @@ func (o *Orchestrator) resetTask(task stitchTask, reason string) {
 	if err := removeInProgressLabel(task.repo, task.ghNumber); err != nil {
 		logf("resetTask: WARNING removeInProgressLabel failed for #%d: %v", task.ghNumber, err)
 	}
-	cleanupWorktree(task)
+	if !cleanupWorktree(task) {
+		logf("resetTask: skipping force branch delete for %s (worktree not removed)", task.branchName)
+		return
+	}
 	if err := gitForceDeleteBranch(task.branchName, "."); err != nil {
 		logf("resetTask: WARNING force branch delete failed for %s: %v", task.branchName, err)
 	}
 }
 
-func cleanupWorktree(task stitchTask) {
+// cleanupWorktree removes the worktree and its branch. Returns true if the
+// worktree was removed successfully, false if removal failed (branch is left
+// intact to avoid orphaning the worktree).
+func cleanupWorktree(task stitchTask) bool {
 	logf("cleanupWorktree: removing worktree %s", task.worktreeDir)
 	if err := gitWorktreeRemove(task.worktreeDir, "."); err != nil {
 		logf("cleanupWorktree: worktree remove failed, skipping branch delete: %v", err)
-		return
+		return false
 	}
 
 	logf("cleanupWorktree: deleting branch %s", task.branchName)
@@ -761,6 +767,7 @@ func cleanupWorktree(task stitchTask) {
 	}
 
 	logf("cleanupWorktree: done for task %s", task.id)
+	return true
 }
 
 func (o *Orchestrator) closeStitchTask(task stitchTask, rec InvocationRecord) {

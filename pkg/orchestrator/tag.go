@@ -50,12 +50,11 @@ func (o *Orchestrator) Tag() error {
 	if o.cfg.Project.VersionFile != "" {
 		logf("tag: writing version %s to %s", tag, o.cfg.Project.VersionFile)
 		if err := writeVersionConst(o.cfg.Project.VersionFile, tag); err != nil {
-			logf("tag: version file warning: %v", err)
-		} else {
-			_ = gitStageAll(".") // best-effort; commit below handles empty index
-			if err := gitCommit(fmt.Sprintf("Set version to %s", tag), "."); err != nil {
-				logf("tag: version commit warning: %v", err)
-			}
+			return fmt.Errorf("tag %s created but version file update failed: %w", tag, err)
+		}
+		_ = gitStageAll(".") // best-effort; commit below handles empty index
+		if err := gitCommit(fmt.Sprintf("Set version to %s", tag), "."); err != nil {
+			logf("tag: version commit warning: %v", err)
 		}
 	}
 

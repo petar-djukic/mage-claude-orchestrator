@@ -208,18 +208,29 @@ func createCobblerIssue(repo, generation string, issue proposedIssue) (int, erro
 		return 0, fmt.Errorf("gh issue create: %w", err)
 	}
 
-	// Parse the issue number from the URL output (e.g. "https://github.com/owner/repo/issues/123\n").
-	url := strings.TrimSpace(string(out))
+	number, err := parseIssueURL(string(out))
+	if err != nil {
+		return 0, err
+	}
+	logf("createCobblerIssue: created #%d %q gen=%s index=%d dep=%d",
+		number, issue.Title, generation, issue.Index, issue.Dependency)
+	return number, nil
+}
+
+// parseIssueURL extracts a GitHub issue number from a URL string like
+// "https://github.com/owner/repo/issues/123\n". Returns an error for
+// malformed or empty output.
+func parseIssueURL(raw string) (int, error) {
+	url := strings.TrimSpace(raw)
 	parts := strings.Split(url, "/")
-	if len(parts) == 0 {
-		return 0, fmt.Errorf("parsing gh issue create output: empty URL (raw: %s)", string(out))
+	// A valid GitHub issue URL has at least 7 segments: ["https:", "", "github.com", "owner", "repo", "issues", "123"].
+	if len(parts) < 7 {
+		return 0, fmt.Errorf("parsing gh issue create output: expected URL, got %q", url)
 	}
 	var number int
 	if _, err := fmt.Sscanf(parts[len(parts)-1], "%d", &number); err != nil || number == 0 {
 		return 0, fmt.Errorf("parsing gh issue create output: could not extract number from %q", url)
 	}
-	logf("createCobblerIssue: created #%d %q gen=%s index=%d dep=%d",
-		number, issue.Title, generation, issue.Index, issue.Dependency)
 	return number, nil
 }
 
@@ -241,6 +252,12 @@ func listOpenCobblerIssues(repo, generation string) ([]cobblerIssue, error) {
 		return nil, fmt.Errorf("gh api repos issues: %w", err)
 	}
 
+	return parseCobblerIssuesJSON(out)
+}
+
+// parseCobblerIssuesJSON parses the JSON output from the GitHub REST API issues
+// endpoint into a slice of cobblerIssue structs.
+func parseCobblerIssuesJSON(data []byte) ([]cobblerIssue, error) {
 	var raw []struct {
 		Number int    `json:"number"`
 		Title  string `json:"title"`
@@ -249,7 +266,7 @@ func listOpenCobblerIssues(repo, generation string) ([]cobblerIssue, error) {
 			Name string `json:"name"`
 		} `json:"labels"`
 	}
-	if err := json.Unmarshal(out, &raw); err != nil {
+	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil, fmt.Errorf("parsing gh api repos issues: %w", err)
 	}
 

@@ -301,3 +301,211 @@ func TestResolveTargetRepo_Empty(t *testing.T) {
 		t.Errorf("got %q, want empty when nothing configured", got)
 	}
 }
+
+// --- parseIssueURL ---
+
+func TestParseIssueURL_ValidURL(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		raw  string
+		want int
+	}{
+		{"standard URL", "https://github.com/owner/repo/issues/123\n", 123},
+		{"no trailing newline", "https://github.com/owner/repo/issues/42", 42},
+		{"whitespace padded", "  https://github.com/owner/repo/issues/7  \n", 7},
+		{"large number", "https://github.com/org/project/issues/99999\n", 99999},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := parseIssueURL(tc.raw)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("got %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestParseIssueURL_InvalidInput(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		raw  string
+	}{
+		{"empty string", ""},
+		{"only whitespace", "  \n  "},
+		{"error message", "Error: could not create issue"},
+		{"short path", "github.com/issues/123"},
+		{"no number at end", "https://github.com/owner/repo/issues/abc"},
+		{"zero issue number", "https://github.com/owner/repo/issues/0"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := parseIssueURL(tc.raw)
+			if err == nil {
+				t.Error("expected error for invalid input")
+			}
+		})
+	}
+}
+
+// --- parseCobblerIssuesJSON ---
+
+func TestParseIssuesJSON_ValidJSON(t *testing.T) {
+	t.Parallel()
+
+	input := `[
+		{
+			"number": 10,
+			"title": "Task 1",
+			"body": "---\ncobbler_generation: gen-001\ncobbler_index: 1\n---\n\nDo something",
+			"labels": [{"name": "cobbler-gen-gen-001"}, {"name": "cobbler-ready"}]
+		},
+		{
+			"number": 11,
+			"title": "Task 2",
+			"body": "---\ncobbler_generation: gen-001\ncobbler_index: 2\ncobbler_depends_on: 1\n---\n\nDo something else",
+			"labels": [{"name": "cobbler-gen-gen-001"}]
+		}
+	]`
+
+	issues, err := parseCobblerIssuesJSON([]byte(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(issues) != 2 {
+		t.Fatalf("got %d issues, want 2", len(issues))
+	}
+
+	// Check first issue.
+	if issues[0].Number != 10 {
+		t.Errorf("issue[0].Number = %d, want 10", issues[0].Number)
+	}
+	if issues[0].Index != 1 {
+		t.Errorf("issue[0].Index = %d, want 1", issues[0].Index)
+	}
+	if issues[0].DependsOn != -1 {
+		t.Errorf("issue[0].DependsOn = %d, want -1", issues[0].DependsOn)
+	}
+	if issues[0].Description != "Do something" {
+		t.Errorf("issue[0].Description = %q, want %q", issues[0].Description, "Do something")
+	}
+	if len(issues[0].Labels) != 2 {
+		t.Errorf("issue[0].Labels = %v, want 2 labels", issues[0].Labels)
+	}
+
+	// Check second issue with dependency.
+	if issues[1].DependsOn != 1 {
+		t.Errorf("issue[1].DependsOn = %d, want 1", issues[1].DependsOn)
+	}
+}
+
+func TestParseIssuesJSON_EmptyArray(t *testing.T) {
+	t.Parallel()
+	issues, err := parseCobblerIssuesJSON([]byte("[]"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(issues) != 0 {
+		t.Errorf("got %d issues, want 0", len(issues))
+	}
+}
+
+func TestParseIssuesJSON_MalformedJSON(t *testing.T) {
+	t.Parallel()
+	_, err := parseCobblerIssuesJSON([]byte("{not valid json"))
+	if err == nil {
+		t.Error("expected error for malformed JSON")
+	}
+}
+
+func TestParseIssuesJSON_NoFrontMatter(t *testing.T) {
+	t.Parallel()
+	input := `[{"number": 5, "title": "Plain issue", "body": "No front matter here", "labels": []}]`
+	issues, err := parseCobblerIssuesJSON([]byte(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(issues) != 1 {
+		t.Fatalf("got %d issues, want 1", len(issues))
+	}
+	if issues[0].Index != 0 {
+		t.Errorf("Index = %d, want 0 for missing front-matter", issues[0].Index)
+	}
+	if issues[0].Generation != "" {
+		t.Errorf("Generation = %q, want empty for missing front-matter", issues[0].Generation)
+	}
+}
+
+func TestParseIssuesJSON_NoLabels(t *testing.T) {
+	t.Parallel()
+	input := `[{"number": 1, "title": "No labels", "body": "", "labels": []}]`
+	issues, err := parseCobblerIssuesJSON([]byte(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(issues[0].Labels) != 0 {
+		t.Errorf("Labels = %v, want empty", issues[0].Labels)
+	}
+}
+
+// --- DAG promotion edge cases ---
+
+func TestDAGPromotion_DiamondDependency(t *testing.T) {
+	t.Parallel()
+
+	// Diamond: 1 has no dep, 2 and 3 depend on 1, 4 depends on both 2 and 3.
+	// Since cobbler_depends_on is a single value, 4 depends on 3 (the higher index).
+	// When 1 is open: 2 blocked, 3 blocked, 4 blocked.
+	issues := []cobblerIssue{
+		{Number: 10, Index: 1, DependsOn: -1},
+		{Number: 11, Index: 2, DependsOn: 1},
+		{Number: 12, Index: 3, DependsOn: 1},
+		{Number: 13, Index: 4, DependsOn: 3},
+	}
+
+	openIndices := map[int]bool{1: true, 2: true, 3: true, 4: true}
+	for _, iss := range issues {
+		blocked := iss.DependsOn >= 0 && openIndices[iss.DependsOn]
+		switch iss.Number {
+		case 10:
+			if blocked {
+				t.Error("issue #10 (no dep) should not be blocked")
+			}
+		case 11, 12:
+			if !blocked {
+				t.Errorf("issue #%d (depends on 1, which is open) should be blocked", iss.Number)
+			}
+		case 13:
+			if !blocked {
+				t.Error("issue #13 (depends on 3, which is open) should be blocked")
+			}
+		}
+	}
+}
+
+func TestDAGPromotion_AllDepsResolved(t *testing.T) {
+	t.Parallel()
+
+	// All dependencies are closed (not in openIndices).
+	issues := []cobblerIssue{
+		{Number: 20, Index: 3, DependsOn: 2},
+		{Number: 21, Index: 4, DependsOn: 3},
+	}
+
+	openIndices := map[int]bool{3: true, 4: true} // 1 and 2 are closed
+	for _, iss := range issues {
+		blocked := iss.DependsOn >= 0 && openIndices[iss.DependsOn]
+		if iss.Number == 20 && blocked {
+			t.Error("issue #20 (dep 2 closed) should be unblocked")
+		}
+		if iss.Number == 21 && !blocked {
+			t.Error("issue #21 (dep 3 still open) should be blocked")
+		}
+	}
+}

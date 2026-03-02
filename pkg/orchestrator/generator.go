@@ -146,7 +146,11 @@ func (o *Orchestrator) RunCycles(label string) error {
 			return fmt.Errorf("cycle %d measure: %w", cycle, err)
 		}
 
-		if !o.hasOpenIssues() {
+		open, err := o.hasOpenIssues()
+		if err != nil {
+			logf("generator %s: hasOpenIssues error (assuming open): %v", label, err)
+		}
+		if !open && err == nil {
 			logf("generator %s: no open issues remain, stopping after %d cycle(s)", label, cycle)
 			break
 		}

@@ -43,7 +43,7 @@ func PrepareSnapshot(orchRoot string) (string, func(), error) {
 	}
 	orch := orchestrator.New(cfg)
 
-	version, err := latestModuleVersion(ScaffoldModule)
+	version, err := latestModuleVersion(ScaffoldModule, cfg.Cobbler.DocTagPrefix)
 	if err != nil {
 		return "", nil, fmt.Errorf("resolving latest version of %s: %w", ScaffoldModule, err)
 	}
@@ -100,8 +100,9 @@ func overrideSnapshotIssuesRepo(snapDir, issuesRepo string) error {
 }
 
 // latestModuleVersion resolves the latest tagged version of a Go module
-// using `go list -m -versions`. Returns the last (highest) version.
-func latestModuleVersion(module string) (string, error) {
+// whose version string starts with prefix (e.g. "v0." for requirements-only
+// releases). Uses `go list -m -versions` and filters to matching versions.
+func latestModuleVersion(module, prefix string) (string, error) {
 	out, err := exec.Command("go", "list", "-m", "-versions", module).Output()
 	if err != nil {
 		return "", fmt.Errorf("go list -m -versions %s: %w", module, err)
@@ -110,5 +111,15 @@ func latestModuleVersion(module string) (string, error) {
 	if len(parts) < 2 {
 		return "", fmt.Errorf("no versions found for %s", module)
 	}
-	return parts[len(parts)-1], nil
+	// Filter to versions matching the prefix and pick the last (highest).
+	var best string
+	for _, v := range parts[1:] {
+		if strings.HasPrefix(v, prefix) {
+			best = v
+		}
+	}
+	if best == "" {
+		return "", fmt.Errorf("no versions matching prefix %q found for %s", prefix, module)
+	}
+	return best, nil
 }

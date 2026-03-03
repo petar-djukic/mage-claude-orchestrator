@@ -526,19 +526,13 @@ func validateMeasureOutput(issues []proposedIssue, maxReqs int, subItemCounts ma
 		// references to their sub-item counts (GH-122).
 		expandedCount := expandedRequirementCount(desc.Requirements, subItemCounts)
 
-		if maxReqs > 0 && rCount > maxReqs {
-			msg := fmt.Sprintf("[%d] %q: has %d requirements, max is %d", issue.Index, issue.Title, rCount, maxReqs)
+		// Enforce max_requirements_per_task on the expanded sub-item count,
+		// not the top-level group count (GH-535). A requirement referencing
+		// "prd003 R2" where R2 has 10 sub-items counts as 10, not 1.
+		if maxReqs > 0 && expandedCount > maxReqs {
+			msg := fmt.Sprintf("[%d] %q: expanded sub-item count is %d, max is %d", issue.Index, issue.Title, expandedCount, maxReqs)
 			logf("validateMeasureOutput: %s", msg)
 			result.Errors = append(result.Errors, msg)
-		}
-
-		// Log expanded count as warning when it exceeds the limit.
-		// This is best-effort — we never block on expanded counts.
-		if maxReqs > 0 && expandedCount > maxReqs && expandedCount != rCount {
-			msg := fmt.Sprintf("[%d] %q: expanded sub-item count is %d (max %d); consider restructuring PRD requirement groups",
-				issue.Index, issue.Title, expandedCount, maxReqs)
-			logf("validateMeasureOutput: %s", msg)
-			result.Warnings = append(result.Warnings, msg)
 		}
 
 		if desc.DeliverableType == "code" {

@@ -1341,3 +1341,51 @@ func TestRestoreFromStartTag_SkipsMagefiles(t *testing.T) {
 		t.Error("magefiles/build.go was restored, but should have been skipped")
 	}
 }
+
+// --- resolveStopTarget (pure, parallelizable) ---
+
+func TestResolveStopTarget_CallerOnFeatureBranch_UsesFeatureBranch(t *testing.T) {
+	t.Parallel()
+	// Caller checked out a feature branch before running generator:stop.
+	// Expected: merge into the feature branch, not the recorded base.
+	got := resolveStopTarget("gh-168-feature", "generation-2026-03-03", "main")
+	if got != "gh-168-feature" {
+		t.Errorf("resolveStopTarget = %q, want %q", got, "gh-168-feature")
+	}
+}
+
+func TestResolveStopTarget_CallerOnRecordedBase_UsesRecordedBase(t *testing.T) {
+	t.Parallel()
+	// Caller is on the recorded base branch (normal workflow, no change).
+	got := resolveStopTarget("main", "generation-2026-03-03", "main")
+	if got != "main" {
+		t.Errorf("resolveStopTarget = %q, want %q", got, "main")
+	}
+}
+
+func TestResolveStopTarget_CallerOnGenBranch_UsesRecordedBase(t *testing.T) {
+	t.Parallel()
+	// Caller is already on the generation branch itself; fall back to recorded base.
+	got := resolveStopTarget("generation-2026-03-03", "generation-2026-03-03", "main")
+	if got != "main" {
+		t.Errorf("resolveStopTarget = %q, want %q", got, "main")
+	}
+}
+
+func TestResolveStopTarget_CustomRecordedBase_FeatureBranchOverrides(t *testing.T) {
+	t.Parallel()
+	// Project uses a custom base branch (develop) and caller is on a feature branch.
+	got := resolveStopTarget("gh-42-my-fix", "generation-2026-03-03", "develop")
+	if got != "gh-42-my-fix" {
+		t.Errorf("resolveStopTarget = %q, want %q", got, "gh-42-my-fix")
+	}
+}
+
+func TestResolveStopTarget_CallerOnCustomBase_UsesCustomBase(t *testing.T) {
+	t.Parallel()
+	// Caller is on the custom base branch itself; no feature branch override.
+	got := resolveStopTarget("develop", "generation-2026-03-03", "develop")
+	if got != "develop" {
+		t.Errorf("resolveStopTarget = %q, want %q", got, "develop")
+	}
+}

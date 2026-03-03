@@ -284,6 +284,20 @@ func (o *Orchestrator) readBaseBranch() string {
 	return branch
 }
 
+// resolveStopTarget returns the branch that generator:stop should merge into.
+// callerBranch is the branch checked out when generator:stop was invoked.
+// genBranch is the generation branch being stopped. recordedBase is the branch
+// written by generator:start. When the caller is on a branch other than the
+// generation branch and other than the recorded base, that caller branch is
+// returned so that generator:stop merges into an explicit feature branch rather
+// than always forcing a merge into the recorded base (GH-523).
+func resolveStopTarget(callerBranch, genBranch, recordedBase string) string {
+	if callerBranch != genBranch && callerBranch != recordedBase {
+		return callerBranch
+	}
+	return recordedBase
+}
+
 // GeneratorStop completes a generation trail and merges it into the base branch.
 // Reads the base branch from .cobbler/base-branch (falls back to "main").
 // Uses Config.GenerationBranch, current branch, or auto-detects.
@@ -321,13 +335,27 @@ func (o *Orchestrator) GeneratorStop() error {
 
 	logf("generator:stop: beginning")
 
+	// Capture the caller's branch before switching to the generation branch.
+	// If the caller is on a feature branch (e.g. gh-168-...) rather than
+	// the recorded base branch, prefer it as the merge target so that
+	// generator:stop respects the PR workflow described in the close-out
+	// procedure (GH-523).
+	callerBranch, err := gitCurrentBranch(".")
+	if err != nil {
+		return fmt.Errorf("getting current branch: %w", err)
+	}
+
 	// Switch to the generation branch and tag its final state.
 	if err := ensureOnBranch(branch); err != nil {
 		return fmt.Errorf("switching to generation branch: %w", err)
 	}
 
-	// Read the base branch before leaving the generation branch (prd002 R5.3).
-	baseBranch := o.readBaseBranch()
+	// Determine the merge target (GH-523).
+	recordedBase := o.readBaseBranch()
+	baseBranch := resolveStopTarget(callerBranch, branch, recordedBase)
+	if baseBranch != recordedBase {
+		logf("generator:stop: caller was on %s; using it as merge target instead of recorded base %s", callerBranch, recordedBase)
+	}
 
 	logf("generator:stop: tagging as %s", finishedTag)
 	if err := gitTag(finishedTag, "."); err != nil {

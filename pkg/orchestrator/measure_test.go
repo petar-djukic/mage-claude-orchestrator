@@ -613,16 +613,70 @@ func TestExpandedRequirementCount_FuzzyPRDStemMatch(t *testing.T) {
 	}
 }
 
-// --- validateMeasureOutput expanded count warning ---
+// --- validateMeasureOutput expanded count enforcement (GH-535) ---
 
-func TestValidateMeasureOutput_ExpandedCountWarning(t *testing.T) {
+func TestValidateMeasureOutput_ExpandedCount_ExceedsLimit_HardError(t *testing.T) {
 	t.Parallel()
+	// 4 listed requirements (within limit), but prd003 R2 expands to 10 sub-items.
+	// Expanded total = 10+3 = 13, maxReqs = 8 → hard error.
 	subItems := map[string]map[string]int{
 		"prd003": {"R2": 10},
 	}
 	issues := []proposedIssue{{
 		Index: 0,
 		Title: "Expanded task",
+		Description: `deliverable_type: code
+requirements:
+  - id: R1
+    text: Implement prd003 R2
+  - id: R2
+    text: plain req
+  - id: R3
+    text: another req
+  - id: R4
+    text: yet another
+acceptance_criteria:
+  - id: AC1
+    text: ac1
+  - id: AC2
+    text: ac2
+  - id: AC3
+    text: ac3
+  - id: AC4
+    text: ac4
+  - id: AC5
+    text: ac5
+design_decisions:
+  - id: D1
+    text: d1
+  - id: D2
+    text: d2
+  - id: D3
+    text: d3
+`,
+	}}
+	vr := validateMeasureOutput(issues, 8, subItems)
+	found := false
+	for _, e := range vr.Errors {
+		if contains(e, "expanded sub-item count") && contains(e, "max is") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected hard error for expanded count 13 > maxReqs 8, got errors: %v", vr.Errors)
+	}
+}
+
+func TestValidateMeasureOutput_ExpandedCount_WithinLimit_NoError(t *testing.T) {
+	t.Parallel()
+	// prd003 R2 has 2 sub-items; total expanded = 2+3 = 5, maxReqs = 8 → no error.
+	subItems := map[string]map[string]int{
+		"prd003": {"R2": 2},
+	}
+	issues := []proposedIssue{{
+		Index: 0,
+		Title: "Small task",
 		Description: `deliverable_type: code
 requirements:
   - id: R1
@@ -655,28 +709,16 @@ design_decisions:
     text: d3
 `,
 	}}
-	// 5 listed requirements, but expanded count = 10+4 = 14. maxReqs = 8.
-	// Should produce a warning (not an error) about expanded count.
+	// expanded = 2+4 = 6, maxReqs = 8 → no expanded-count error.
 	vr := validateMeasureOutput(issues, 8, subItems)
-	foundWarning := false
-	for _, w := range vr.Warnings {
-		if contains(w, "expanded sub-item count") {
-			foundWarning = true
-			break
-		}
-	}
-	if !foundWarning {
-		t.Errorf("expected expanded count warning, got warnings: %v, errors: %v", vr.Warnings, vr.Errors)
-	}
-	// The expanded count violation must NOT appear in errors.
 	for _, e := range vr.Errors {
-		if contains(e, "expanded") {
-			t.Errorf("expanded count violation should be warning, not error: %s", e)
+		if contains(e, "expanded sub-item count") {
+			t.Errorf("should not error when expanded count under limit, got: %s", e)
 		}
 	}
 }
 
-func TestValidateMeasureOutput_NoExpandedWarningWhenUnderLimit(t *testing.T) {
+func TestValidateMeasureOutput_NoExpandedErrorWhenUnderLimit(t *testing.T) {
 	t.Parallel()
 	subItems := map[string]map[string]int{
 		"prd003": {"R2": 2},
@@ -716,11 +758,11 @@ design_decisions:
     text: d3
 `,
 	}}
-	// 5 listed, expanded = 2+4 = 6. maxReqs = 8. Under limit.
+	// 5 listed, expanded = 2+4 = 6. maxReqs = 8. Under limit — no error.
 	vr := validateMeasureOutput(issues, 8, subItems)
-	for _, w := range vr.Warnings {
-		if contains(w, "expanded") {
-			t.Errorf("should not warn when expanded count under limit, got: %s", w)
+	for _, e := range vr.Errors {
+		if contains(e, "expanded sub-item count") {
+			t.Errorf("should not error when expanded count under limit, got: %s", e)
 		}
 	}
 }

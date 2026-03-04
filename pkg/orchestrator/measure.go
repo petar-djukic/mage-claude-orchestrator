@@ -423,6 +423,19 @@ func (o *Orchestrator) buildMeasurePrompt(userInput, existingIssues string, limi
 		"max_requirements": fmt.Sprintf("%d", o.cfg.Cobbler.MaxRequirementsPerTask),
 	}
 
+	// Inject package_contracts when source mode is "headers" or "custom"
+	// and any PRD declares a package_contract. The contracts give the
+	// measure agent structured API context alongside (or instead of) source.
+	var measureContracts []OODPackageContractRef
+	sourceMode := phaseCtx.SourceMode
+	if sourceMode == "headers" || sourceMode == "custom" {
+		contracts, _ := loadOODPromptContext()
+		if len(contracts) > 0 {
+			measureContracts = contracts
+			logf("buildMeasurePrompt: injecting %d package_contracts (source_mode=%s)", len(contracts), sourceMode)
+		}
+	}
+
 	doc := MeasurePromptDoc{
 		Role:                    tmpl.Role,
 		ProjectContext:          projectCtx,
@@ -434,6 +447,7 @@ func (o *Orchestrator) buildMeasurePrompt(userInput, existingIssues string, limi
 		GoldenExample:           o.cfg.Cobbler.GoldenExample,
 		AdditionalContext:       userInput,
 		ValidationErrors:        validationErrors,
+		PackageContracts:        measureContracts,
 	}
 
 	// Enforce releases scope: the roadmap is not filtered by release, so

@@ -5,6 +5,7 @@ package orchestrator
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -359,5 +360,237 @@ func TestStitchPromptIncludesGoStyleConstitution(t *testing.T) {
 
 	if !strings.Contains(prompt, "go_style_constitution:") {
 		t.Error("stitch prompt missing go_style_constitution YAML key")
+	}
+}
+
+// --- loadOODPromptContext ---
+
+func TestLoadOODPromptContext_Empty(t *testing.T) {
+	// Not parallel: uses os.Chdir.
+	dir := t.TempDir()
+	orig, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(orig)
+	os.MkdirAll("docs/specs/product-requirements", 0o755)
+
+	contracts, protocols := loadOODPromptContext()
+	if len(contracts) != 0 {
+		t.Errorf("expected no contracts with no PRD files, got %d", len(contracts))
+	}
+	if len(protocols) != 0 {
+		t.Errorf("expected no protocols with no ARCHITECTURE.yaml, got %d", len(protocols))
+	}
+}
+
+func TestLoadOODPromptContext_PackageContracts(t *testing.T) {
+	// Not parallel: uses os.Chdir.
+	dir := t.TempDir()
+	orig, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(orig)
+
+	os.MkdirAll("docs/specs/product-requirements", 0o755)
+	// One PRD with package_contract, one without.
+	os.WriteFile(filepath.Join("docs/specs/product-requirements", "prd001-pkg.yaml"), []byte(`id: prd001-pkg
+title: Pkg
+package_contract:
+  exports:
+    - name: FuncA
+      signature: "func FuncA() error"
+`), 0o644)
+	os.WriteFile(filepath.Join("docs/specs/product-requirements", "prd002-cmd.yaml"), []byte(`id: prd002-cmd
+title: Cmd
+`), 0o644)
+
+	contracts, _ := loadOODPromptContext()
+	if len(contracts) != 1 {
+		t.Fatalf("expected 1 contract, got %d", len(contracts))
+	}
+	if contracts[0].PRDID != "prd001-pkg" {
+		t.Errorf("expected prd001-pkg, got %q", contracts[0].PRDID)
+	}
+	if len(contracts[0].Contract.Exports) != 1 || contracts[0].Contract.Exports[0].Name != "FuncA" {
+		t.Errorf("expected FuncA export, got %v", contracts[0].Contract.Exports)
+	}
+}
+
+func TestLoadOODPromptContext_SharedProtocols(t *testing.T) {
+	// Not parallel: uses os.Chdir.
+	dir := t.TempDir()
+	orig, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(orig)
+
+	os.MkdirAll("docs/specs/product-requirements", 0o755)
+	os.MkdirAll("docs", 0o755)
+	os.WriteFile("docs/ARCHITECTURE.yaml", []byte(`id: arch
+title: Architecture
+overview:
+  summary: s
+  lifecycle: l
+  coordination_pattern: c
+shared_protocols:
+  - name: SIGPIPE handling
+    description: All commands must handle SIGPIPE
+    pattern: "signal.Notify(...)"
+`), 0o644)
+
+	_, protocols := loadOODPromptContext()
+	if len(protocols) != 1 {
+		t.Fatalf("expected 1 protocol, got %d", len(protocols))
+	}
+	if protocols[0].Name != "SIGPIPE handling" {
+		t.Errorf("expected SIGPIPE handling, got %q", protocols[0].Name)
+	}
+}
+
+func TestLoadOODPromptContext_EmptyContract_Skipped(t *testing.T) {
+	// Not parallel: uses os.Chdir.
+	// PRD with package_contract but no exports should be skipped.
+	dir := t.TempDir()
+	orig, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(orig)
+
+	os.MkdirAll("docs/specs/product-requirements", 0o755)
+	os.WriteFile(filepath.Join("docs/specs/product-requirements", "prd001-empty.yaml"), []byte(`id: prd001-empty
+title: Empty
+package_contract:
+  exports: []
+`), 0o644)
+
+	contracts, _ := loadOODPromptContext()
+	if len(contracts) != 0 {
+		t.Errorf("expected no contracts for empty exports, got %d", len(contracts))
+	}
+}
+
+// --- OOD injection in buildStitchPrompt ---
+
+func TestBuildStitchPrompt_OODSharedProtocols(t *testing.T) {
+	// Not parallel: uses os.Chdir.
+	// When ARCHITECTURE.yaml has shared_protocols, the stitch prompt includes them.
+	dir := t.TempDir()
+	orig, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(orig)
+
+	os.MkdirAll("docs/specs/product-requirements", 0o755)
+	os.MkdirAll("docs", 0o755)
+	os.WriteFile("docs/ARCHITECTURE.yaml", []byte(`id: arch
+title: Architecture
+overview:
+  summary: s
+  lifecycle: l
+  coordination_pattern: c
+shared_protocols:
+  - name: error-reporting
+    description: Use stderr for all error output
+`), 0o644)
+
+	o := New(Config{})
+	task := stitchTask{
+		id:        "test-ood",
+		title:     "Implement ls",
+		issueType: "code",
+	}
+	out, err := o.buildStitchPrompt(task)
+	if err != nil {
+		t.Fatalf("buildStitchPrompt: %v", err)
+	}
+	if !strings.Contains(out, "shared_protocols:") {
+		t.Errorf("stitch prompt missing shared_protocols key; output:\n%s", out)
+	}
+	if !strings.Contains(out, "error-reporting") {
+		t.Errorf("stitch prompt missing protocol name 'error-reporting'; output:\n%s", out)
+	}
+}
+
+func TestBuildStitchPrompt_OODPackageContracts(t *testing.T) {
+	// Not parallel: uses os.Chdir.
+	dir := t.TempDir()
+	orig, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(orig)
+
+	os.MkdirAll("docs/specs/product-requirements", 0o755)
+	os.WriteFile(filepath.Join("docs/specs/product-requirements", "prd001-pkg.yaml"), []byte(`id: prd001-pkg
+title: Pkg
+package_contract:
+  exports:
+    - name: FuncA
+`), 0o644)
+
+	o := New(Config{})
+	task := stitchTask{id: "t1", title: "impl", issueType: "code"}
+	out, err := o.buildStitchPrompt(task)
+	if err != nil {
+		t.Fatalf("buildStitchPrompt: %v", err)
+	}
+	if !strings.Contains(out, "package_contracts:") {
+		t.Errorf("stitch prompt missing package_contracts key; output:\n%s", out)
+	}
+	if !strings.Contains(out, "FuncA") {
+		t.Errorf("stitch prompt missing FuncA export; output:\n%s", out)
+	}
+}
+
+// --- OOD injection in buildMeasurePrompt ---
+
+func TestBuildMeasurePrompt_OODContractsHeaders(t *testing.T) {
+	// Not parallel: uses os.Chdir.
+	// When source_mode=headers and a PRD has package_contract, measure prompt includes contracts.
+	dir := t.TempDir()
+	orig, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(orig)
+
+	os.MkdirAll("docs/specs/product-requirements", 0o755)
+	os.WriteFile(filepath.Join("docs/specs/product-requirements", "prd001-pkg.yaml"), []byte(`id: prd001-pkg
+title: Pkg
+package_contract:
+  exports:
+    - name: ExportedFunc
+`), 0o644)
+	// Write a stitch context to force source_mode=headers.
+	os.MkdirAll(".cobbler", 0o755)
+	os.WriteFile(".cobbler/measure_context.yaml", []byte("source_mode: headers\n"), 0o644)
+
+	o := New(Config{Cobbler: CobblerConfig{Dir: ".cobbler"}})
+	out, err := o.buildMeasurePrompt("", "", 1)
+	if err != nil {
+		t.Fatalf("buildMeasurePrompt: %v", err)
+	}
+	if !strings.Contains(out, "package_contracts:") {
+		t.Errorf("measure prompt missing package_contracts with source_mode=headers; output:\n%s", out)
+	}
+	if !strings.Contains(out, "ExportedFunc") {
+		t.Errorf("measure prompt missing ExportedFunc; output:\n%s", out)
+	}
+}
+
+func TestBuildMeasurePrompt_OODContractsFullMode_Excluded(t *testing.T) {
+	// Not parallel: uses os.Chdir.
+	// When source_mode is not headers/custom, package_contracts are NOT injected.
+	dir := t.TempDir()
+	orig, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(orig)
+
+	os.MkdirAll("docs/specs/product-requirements", 0o755)
+	os.WriteFile(filepath.Join("docs/specs/product-requirements", "prd001-pkg.yaml"), []byte(`id: prd001-pkg
+title: Pkg
+package_contract:
+  exports:
+    - name: ExportedFunc
+`), 0o644)
+
+	o := New(Config{})
+	out, err := o.buildMeasurePrompt("", "", 1)
+	if err != nil {
+		t.Fatalf("buildMeasurePrompt: %v", err)
+	}
+	if strings.Contains(out, "package_contracts:") {
+		t.Errorf("measure prompt should not include package_contracts with default source_mode; output:\n%s", out)
 	}
 }

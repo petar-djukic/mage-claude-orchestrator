@@ -662,6 +662,17 @@ func (o *Orchestrator) buildStitchPrompt(task stitchTask) (string, error) {
 
 	repoFiles := gitLsFiles(task.worktreeDir)
 
+	// Load OOD context: shared_protocols from ARCHITECTURE.yaml and
+	// package_contracts from any PRD that declares them. These give the
+	// agent structured API context for its dependencies.
+	oodContracts, oodProtocols := loadOODPromptContext()
+	if len(oodProtocols) > 0 {
+		logf("buildStitchPrompt: injecting %d shared_protocols", len(oodProtocols))
+	}
+	if len(oodContracts) > 0 {
+		logf("buildStitchPrompt: injecting %d package_contracts", len(oodContracts))
+	}
+
 	doc := StitchPromptDoc{
 		Role:                  tmpl.Role,
 		RepositoryFiles:       repoFiles,
@@ -672,6 +683,8 @@ func (o *Orchestrator) buildStitchPrompt(task stitchTask) (string, error) {
 		Task:                  tmpl.Task,
 		Constraints:           tmpl.Constraints,
 		Description:           task.description,
+		SharedProtocols:       oodProtocols,
+		PackageContracts:      oodContracts,
 	}
 
 	out, err := yaml.Marshal(&doc)

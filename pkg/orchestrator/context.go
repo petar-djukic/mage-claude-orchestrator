@@ -452,6 +452,51 @@ type UCInteractionStep struct {
 }
 
 // ---------------------------------------------------------------------------
+// OOD prompt context helpers
+// ---------------------------------------------------------------------------
+
+// OODPackageContractRef bundles a PRD ID with its package_contract for
+// injection into measure and stitch prompts as structured API context.
+type OODPackageContractRef struct {
+	PRDID    string             `yaml:"prd_id"`
+	Contract PRDPackageContract `yaml:"contract"`
+}
+
+// loadOODPromptContext reads all PRDs under docs/specs/product-requirements/
+// and returns:
+//   - contracts: one OODPackageContractRef per PRD that has a non-empty
+//     package_contract (used in both measure and stitch prompts).
+//   - sharedProtocols: the shared_protocols from docs/ARCHITECTURE.yaml
+//     (used in the stitch prompt only).
+//
+// Missing files and parse errors are silently skipped; the function
+// always returns non-nil slices.
+func loadOODPromptContext() (contracts []OODPackageContractRef, sharedProtocols []ArchSharedProtocol) {
+	contracts = []OODPackageContractRef{}
+	sharedProtocols = []ArchSharedProtocol{}
+
+	prdFiles, _ := filepath.Glob("docs/specs/product-requirements/prd*.yaml")
+	for _, path := range prdFiles {
+		prd := loadYAML[PRDDoc](path)
+		if prd == nil || prd.PackageContract == nil || len(prd.PackageContract.Exports) == 0 {
+			continue
+		}
+		contracts = append(contracts, OODPackageContractRef{
+			PRDID:    prd.ID,
+			Contract: *prd.PackageContract,
+		})
+	}
+
+	if data, err := os.ReadFile("docs/ARCHITECTURE.yaml"); err == nil {
+		var arch ArchitectureDoc
+		if yaml.Unmarshal(data, &arch) == nil {
+			sharedProtocols = arch.SharedProtocols
+		}
+	}
+	return contracts, sharedProtocols
+}
+
+// ---------------------------------------------------------------------------
 // Test suite
 // ---------------------------------------------------------------------------
 

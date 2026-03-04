@@ -15,29 +15,32 @@ import (
 // Each field maps directly to a top-level YAML key. When marshaled,
 // it produces a single syntactically correct YAML document.
 type MeasurePromptDoc struct {
-	Role                    string          `yaml:"role"`
-	ProjectContext          *ProjectContext `yaml:"project_context,omitempty"`
-	PlanningConstitution    *yaml.Node     `yaml:"planning_constitution,omitempty"`
-	IssueFormatConstitution *yaml.Node     `yaml:"issue_format_constitution,omitempty"`
-	Task                    string          `yaml:"task"`
-	Constraints             string          `yaml:"constraints"`
-	OutputFormat            string          `yaml:"output_format"`
-	GoldenExample           string          `yaml:"golden_example,omitempty"`
-	AdditionalContext       string          `yaml:"additional_context,omitempty"`
-	ValidationErrors        []string        `yaml:"validation_errors,omitempty"`
+	Role                    string                   `yaml:"role"`
+	ProjectContext          *ProjectContext          `yaml:"project_context,omitempty"`
+	PlanningConstitution    *yaml.Node              `yaml:"planning_constitution,omitempty"`
+	IssueFormatConstitution *yaml.Node              `yaml:"issue_format_constitution,omitempty"`
+	Task                    string                   `yaml:"task"`
+	Constraints             string                   `yaml:"constraints"`
+	OutputFormat            string                   `yaml:"output_format"`
+	GoldenExample           string                   `yaml:"golden_example,omitempty"`
+	AdditionalContext       string                   `yaml:"additional_context,omitempty"`
+	ValidationErrors        []string                 `yaml:"validation_errors,omitempty"`
+	PackageContracts        []OODPackageContractRef  `yaml:"package_contracts,omitempty"`
 }
 
 // StitchPromptDoc is the complete stitch prompt as a YAML document.
 type StitchPromptDoc struct {
-	Role                  string          `yaml:"role"`
-	RepositoryFiles       []string        `yaml:"repository_files,omitempty"`
-	ProjectContext        *ProjectContext `yaml:"project_context,omitempty"`
-	Context               string          `yaml:"context"`
-	ExecutionConstitution *yaml.Node     `yaml:"execution_constitution,omitempty"`
-	GoStyleConstitution   *yaml.Node     `yaml:"go_style_constitution,omitempty"`
-	Task                  string          `yaml:"task"`
-	Constraints           string          `yaml:"constraints"`
-	Description           string          `yaml:"description"`
+	Role                  string                   `yaml:"role"`
+	RepositoryFiles       []string                 `yaml:"repository_files,omitempty"`
+	ProjectContext        *ProjectContext          `yaml:"project_context,omitempty"`
+	Context               string                   `yaml:"context"`
+	ExecutionConstitution *yaml.Node              `yaml:"execution_constitution,omitempty"`
+	GoStyleConstitution   *yaml.Node              `yaml:"go_style_constitution,omitempty"`
+	Task                  string                   `yaml:"task"`
+	Constraints           string                   `yaml:"constraints"`
+	Description           string                   `yaml:"description"`
+	SharedProtocols       []ArchSharedProtocol     `yaml:"shared_protocols,omitempty"`
+	PackageContracts      []OODPackageContractRef  `yaml:"package_contracts,omitempty"`
 }
 
 // promptTemplate holds the static text fields parsed from a prompt

@@ -1732,3 +1732,50 @@ touchpoints:
 		t.Error("prompt missing role field")
 	}
 }
+
+// --- test file exclusion wiring (GH-616) ---
+
+// TestBuildMeasurePrompt_ExcludeTests_DefaultTrue verifies that _test.go files
+// are excluded from the prompt by default (nil MeasureExcludeTests → true) (GH-616).
+func TestBuildMeasurePrompt_ExcludeTests_DefaultTrue(t *testing.T) {
+	_, cleanup := setupContextTestDir(t)
+	defer cleanup()
+
+	os.WriteFile("pkg/app/app_test.go", []byte("package app\n"), 0o644)
+
+	cfg := Config{}
+	cfg.Project.GoSourceDirs = []string{"pkg/"}
+	// MeasureExcludeTests is nil → effectiveMeasureExcludeTests() returns true.
+	o := New(cfg)
+
+	prompt, err := o.buildMeasurePrompt("", "", 1)
+	if err != nil {
+		t.Fatalf("buildMeasurePrompt() error = %v", err)
+	}
+	if strings.Contains(prompt, "app_test.go") {
+		t.Error("_test.go should not appear in prompt when MeasureExcludeTests is unset (default true)")
+	}
+}
+
+// TestBuildMeasurePrompt_ExcludeTests_DisabledFalse verifies that _test.go files
+// appear in the prompt when MeasureExcludeTests is explicitly false (GH-616).
+func TestBuildMeasurePrompt_ExcludeTests_DisabledFalse(t *testing.T) {
+	_, cleanup := setupContextTestDir(t)
+	defer cleanup()
+
+	os.WriteFile("pkg/app/app_test.go", []byte("package app\n"), 0o644)
+
+	f := false
+	cfg := Config{}
+	cfg.Project.GoSourceDirs = []string{"pkg/"}
+	cfg.Cobbler.MeasureExcludeTests = &f
+	o := New(cfg)
+
+	prompt, err := o.buildMeasurePrompt("", "", 1)
+	if err != nil {
+		t.Fatalf("buildMeasurePrompt() error = %v", err)
+	}
+	if !strings.Contains(prompt, "app_test.go") {
+		t.Error("_test.go should appear in prompt when MeasureExcludeTests=false")
+	}
+}

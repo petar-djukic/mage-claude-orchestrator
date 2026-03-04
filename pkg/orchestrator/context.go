@@ -34,6 +34,10 @@ type PhaseContext struct {
 	// SourcePatterns is a newline-delimited list of glob patterns.
 	// When non-empty, only matching source files are included (GH-565).
 	SourcePatterns string `yaml:"source_patterns"`
+	// ExcludeTests excludes *_test.go files from the source code included
+	// in the prompt context. Measure prompt only — stitch needs test files
+	// to write compatible tests (GH-616).
+	ExcludeTests bool `yaml:"exclude_tests"`
 }
 
 // loadPhaseContext reads a phase context YAML file. Returns (nil, nil)
@@ -1537,6 +1541,21 @@ func buildProjectContext(existingIssuesJSON string, project ProjectConfig, phase
 					filtered = append(filtered, sf)
 				}
 			}
+			ctx.SourceCode = filtered
+		}
+
+		// Exclude *_test.go files from the measure prompt when requested (GH-616).
+		// Test files are consumers of the API; the measure agent needs to know
+		// what is tested but not how tests are implemented.
+		if phaseCtx != nil && phaseCtx.ExcludeTests {
+			var filtered []SourceFile
+			for _, sf := range ctx.SourceCode {
+				if !strings.HasSuffix(sf.File, "_test.go") {
+					filtered = append(filtered, sf)
+				}
+			}
+			logf("buildProjectContext: excluded %d _test.go file(s) from source context",
+				len(ctx.SourceCode)-len(filtered))
 			ctx.SourceCode = filtered
 		}
 	}

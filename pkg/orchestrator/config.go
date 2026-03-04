@@ -257,6 +257,14 @@ type CobblerConfig struct {
 	// MeasureSourcePatterns is already set (manual patterns take priority).
 	// Default false; existing behaviour is preserved when false.
 	MeasureRoadmapSource bool `yaml:"measure_roadmap_source"`
+
+	// MeasureExcludeTests excludes *_test.go files from the measure prompt
+	// context. Test files are consumers of the API, not providers; the measure
+	// agent needs to know what is tested but not how tests are implemented.
+	// Default true. Use a pointer so nil (absent) is treated as true and an
+	// explicit false opts out. Set measure_exclude_tests: false to restore
+	// the old behaviour of including test files.
+	MeasureExcludeTests *bool `yaml:"measure_exclude_tests"`
 }
 
 // PodmanConfig holds settings for the podman container runtime.
@@ -323,13 +331,24 @@ type Config struct {
 // DefaultConfigFile is the conventional configuration filename.
 const DefaultConfigFile = "configuration.yaml"
 
+// effectiveMeasureExcludeTests returns whether *_test.go files should be
+// excluded from the measure prompt. Nil (field absent in YAML) defaults to
+// true; an explicit false opts out.
+func (c *CobblerConfig) effectiveMeasureExcludeTests() bool {
+	if c.MeasureExcludeTests == nil {
+		return true
+	}
+	return *c.MeasureExcludeTests
+}
+
 // DefaultConfig returns a Config populated with all default values.
 // Project-specific fields (ModulePath, BinaryName, etc.) are left empty;
 // the caller fills them in or the user edits the generated file.
 func DefaultConfig() Config {
 	t := true
 	cfg := Config{
-		Claude: ClaudeConfig{SilenceAgent: &t},
+		Claude:  ClaudeConfig{SilenceAgent: &t},
+		Cobbler: CobblerConfig{MeasureExcludeTests: &t},
 	}
 	cfg.applyDefaults()
 	return cfg

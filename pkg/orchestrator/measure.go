@@ -370,6 +370,12 @@ func (o *Orchestrator) buildMeasurePrompt(userInput, existingIssues string, limi
 		phaseCtx.SourcePatterns = o.cfg.Cobbler.MeasureSourcePatterns
 		logf("buildMeasurePrompt: measure_source_patterns set from config")
 	}
+	// Apply test exclusion setting (GH-616). Default true; file-level wins
+	// when already set to true by the phaseCtx file.
+	if o.cfg.Cobbler.effectiveMeasureExcludeTests() && !phaseCtx.ExcludeTests {
+		phaseCtx.ExcludeTests = true
+		logf("buildMeasurePrompt: measure_exclude_tests=true, _test.go files will be excluded")
+	}
 
 	// Auto-derive SourcePatterns from the road-map when MeasureRoadmapSource
 	// is enabled and no manual patterns are already set (GH-534).

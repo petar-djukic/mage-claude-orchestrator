@@ -1489,6 +1489,63 @@ func TestBuildProjectContext_SourcePatternsEmpty(t *testing.T) {
 	}
 }
 
+// --- test file exclusion (GH-616) ---
+
+// TestBuildProjectContext_ExcludeTests_True verifies that _test.go files are
+// excluded when PhaseContext.ExcludeTests is true (GH-616).
+func TestBuildProjectContext_ExcludeTests_True(t *testing.T) {
+	_, cleanup := setupContextTestDir(t)
+	defer cleanup()
+
+	os.WriteFile("pkg/app/app_test.go", []byte("package app\n"), 0o644)
+
+	project := ProjectConfig{GoSourceDirs: []string{"pkg/"}}
+	phaseCtx := &PhaseContext{ExcludeTests: true}
+
+	ctx, err := buildProjectContext("", project, phaseCtx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, sf := range ctx.SourceCode {
+		if strings.HasSuffix(sf.File, "_test.go") {
+			t.Errorf("_test.go file should be excluded when ExcludeTests=true, got %q", sf.File)
+		}
+	}
+	// Non-test files must still be present.
+	if len(ctx.SourceCode) == 0 {
+		t.Error("SourceCode should not be empty — non-test files must remain")
+	}
+}
+
+// TestBuildProjectContext_ExcludeTests_False verifies that _test.go files are
+// included when PhaseContext.ExcludeTests is false (GH-616).
+func TestBuildProjectContext_ExcludeTests_False(t *testing.T) {
+	_, cleanup := setupContextTestDir(t)
+	defer cleanup()
+
+	os.WriteFile("pkg/app/app_test.go", []byte("package app\n"), 0o644)
+
+	project := ProjectConfig{GoSourceDirs: []string{"pkg/"}}
+	phaseCtx := &PhaseContext{ExcludeTests: false}
+
+	ctx, err := buildProjectContext("", project, phaseCtx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	found := false
+	for _, sf := range ctx.SourceCode {
+		if strings.HasSuffix(sf.File, "_test.go") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("_test.go file should be included when ExcludeTests=false")
+	}
+}
+
 // ---------------------------------------------------------------------------
 // parseTouchpointPackages tests (GH-534)
 // ---------------------------------------------------------------------------

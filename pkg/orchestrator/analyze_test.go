@@ -1133,3 +1133,377 @@ func TestAnalyze_EmptyDocs(t *testing.T) {
 		o.Analyze()
 	})
 }
+
+// --- OOD Check 10: depends_on violations ---
+
+// setupMinimalOODDir creates the minimal directory structure for OOD tests
+// and returns an *Orchestrator. The caller must os.Chdir to dir first.
+func setupMinimalOODDir(t *testing.T) {
+	t.Helper()
+	os.MkdirAll("docs/specs/product-requirements", 0o755)
+	os.MkdirAll("docs/specs/use-cases", 0o755)
+	os.MkdirAll("docs/specs/test-suites", 0o755)
+	os.MkdirAll("docs/constitutions", 0o755)
+	os.MkdirAll("pkg/orchestrator/constitutions", 0o755)
+	os.WriteFile("docs/road-map.yaml", []byte("id: rm\ntitle: RM\nreleases: []\n"), 0o644)
+}
+
+func TestCollectAnalyzeResult_DependsOnViolation_MissingPRD(t *testing.T) {
+	// Not parallel: uses os.Chdir.
+	dir := t.TempDir()
+	orig, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(orig)
+	setupMinimalOODDir(t)
+
+	// prd002-cmd depends_on prd001-pkg, which does not exist.
+	os.WriteFile("docs/specs/product-requirements/prd002-cmd.yaml", []byte(`id: prd002-cmd
+title: Cmd
+depends_on:
+  - prd_id: prd001-pkg
+    symbols_used:
+      - SomeFunc
+`), 0o644)
+
+	o := &Orchestrator{cfg: Config{}}
+	result, _, err := o.collectAnalyzeResult()
+	if err != nil {
+		t.Fatalf("collectAnalyzeResult: %v", err)
+	}
+	if len(result.DependsOnViolations) != 1 {
+		t.Fatalf("expected 1 violation, got %d: %v", len(result.DependsOnViolations), result.DependsOnViolations)
+	}
+	if !strings.Contains(result.DependsOnViolations[0], "prd001-pkg") {
+		t.Errorf("violation should mention prd001-pkg, got %q", result.DependsOnViolations[0])
+	}
+}
+
+func TestCollectAnalyzeResult_DependsOnViolation_SymbolMissing(t *testing.T) {
+	// Not parallel: uses os.Chdir.
+	dir := t.TempDir()
+	orig, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(orig)
+	setupMinimalOODDir(t)
+
+	// prd001-pkg has a package_contract exporting FuncA; prd002-cmd depends on FuncB.
+	os.WriteFile("docs/specs/product-requirements/prd001-pkg.yaml", []byte(`id: prd001-pkg
+title: Pkg
+package_contract:
+  exports:
+    - name: FuncA
+      signature: "func FuncA() error"
+`), 0o644)
+	os.WriteFile("docs/specs/product-requirements/prd002-cmd.yaml", []byte(`id: prd002-cmd
+title: Cmd
+depends_on:
+  - prd_id: prd001-pkg
+    symbols_used:
+      - FuncA
+      - FuncB
+`), 0o644)
+
+	o := &Orchestrator{cfg: Config{}}
+	result, _, err := o.collectAnalyzeResult()
+	if err != nil {
+		t.Fatalf("collectAnalyzeResult: %v", err)
+	}
+	if len(result.DependsOnViolations) != 1 {
+		t.Fatalf("expected 1 violation (FuncB), got %d: %v", len(result.DependsOnViolations), result.DependsOnViolations)
+	}
+	if !strings.Contains(result.DependsOnViolations[0], "FuncB") {
+		t.Errorf("violation should mention FuncB, got %q", result.DependsOnViolations[0])
+	}
+}
+
+func TestCollectAnalyzeResult_DependsOnViolation_AllSymbolsPresent(t *testing.T) {
+	// Not parallel: uses os.Chdir.
+	dir := t.TempDir()
+	orig, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(orig)
+	setupMinimalOODDir(t)
+
+	// Both symbols_used are in package_contract — no violation.
+	os.WriteFile("docs/specs/product-requirements/prd001-pkg.yaml", []byte(`id: prd001-pkg
+title: Pkg
+package_contract:
+  exports:
+    - name: FuncA
+    - name: FuncB
+`), 0o644)
+	os.WriteFile("docs/specs/product-requirements/prd002-cmd.yaml", []byte(`id: prd002-cmd
+title: Cmd
+depends_on:
+  - prd_id: prd001-pkg
+    symbols_used:
+      - FuncA
+      - FuncB
+`), 0o644)
+
+	o := &Orchestrator{cfg: Config{}}
+	result, _, err := o.collectAnalyzeResult()
+	if err != nil {
+		t.Fatalf("collectAnalyzeResult: %v", err)
+	}
+	if len(result.DependsOnViolations) != 0 {
+		t.Errorf("expected no violations, got %v", result.DependsOnViolations)
+	}
+}
+
+// --- OOD Check 11: dependency_rule violations ---
+
+func TestCollectAnalyzeResult_DependencyRuleViolation(t *testing.T) {
+	// Not parallel: uses os.Chdir.
+	dir := t.TempDir()
+	orig, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(orig)
+	setupMinimalOODDir(t)
+
+	// ARCHITECTURE.yaml: cmd/ must not import cmd/; component_dependency cmd/a -> cmd/b violates this.
+	os.WriteFile("docs/ARCHITECTURE.yaml", []byte(`id: arch-test
+title: Test Architecture
+overview:
+  summary: test
+  lifecycle: test
+  coordination_pattern: test
+dependency_rules:
+  - description: "cmd/ must not import cmd/"
+    from: "cmd/"
+    to: "cmd/"
+    allowed: false
+component_dependencies:
+  - from: "cmd/a"
+    to: "cmd/b"
+`), 0o644)
+
+	o := &Orchestrator{cfg: Config{}}
+	result, _, err := o.collectAnalyzeResult()
+	if err != nil {
+		t.Fatalf("collectAnalyzeResult: %v", err)
+	}
+	if len(result.DependencyRuleViolations) != 1 {
+		t.Fatalf("expected 1 violation, got %d: %v", len(result.DependencyRuleViolations), result.DependencyRuleViolations)
+	}
+	if !strings.Contains(result.DependencyRuleViolations[0], "cmd/a") {
+		t.Errorf("violation should mention cmd/a, got %q", result.DependencyRuleViolations[0])
+	}
+}
+
+func TestCollectAnalyzeResult_DependencyRuleNoViolation(t *testing.T) {
+	// Not parallel: uses os.Chdir.
+	dir := t.TempDir()
+	orig, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(orig)
+	setupMinimalOODDir(t)
+
+	// cmd/a -> pkg/b is allowed even though cmd/ -> cmd/ is forbidden.
+	os.WriteFile("docs/ARCHITECTURE.yaml", []byte(`id: arch-test
+title: Test Architecture
+overview:
+  summary: test
+  lifecycle: test
+  coordination_pattern: test
+dependency_rules:
+  - description: "cmd/ must not import cmd/"
+    from: "cmd/"
+    to: "cmd/"
+    allowed: false
+component_dependencies:
+  - from: "cmd/a"
+    to: "pkg/b"
+`), 0o644)
+
+	o := &Orchestrator{cfg: Config{}}
+	result, _, err := o.collectAnalyzeResult()
+	if err != nil {
+		t.Fatalf("collectAnalyzeResult: %v", err)
+	}
+	if len(result.DependencyRuleViolations) != 0 {
+		t.Errorf("expected no violations, got %v", result.DependencyRuleViolations)
+	}
+}
+
+// --- OOD Check 12: broken struct_refs ---
+
+func TestCollectAnalyzeResult_BrokenStructRef_MissingPRD(t *testing.T) {
+	// Not parallel: uses os.Chdir.
+	dir := t.TempDir()
+	orig, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(orig)
+	setupMinimalOODDir(t)
+
+	// prd002 references prd999 which doesn't exist.
+	os.WriteFile("docs/specs/product-requirements/prd002-cmd.yaml", []byte(`id: prd002-cmd
+title: Cmd
+struct_refs:
+  - prd_id: prd999-missing
+    requirement: R1
+`), 0o644)
+
+	o := &Orchestrator{cfg: Config{}}
+	result, _, err := o.collectAnalyzeResult()
+	if err != nil {
+		t.Fatalf("collectAnalyzeResult: %v", err)
+	}
+	if len(result.BrokenStructRefs) != 1 {
+		t.Fatalf("expected 1 broken ref, got %d: %v", len(result.BrokenStructRefs), result.BrokenStructRefs)
+	}
+	if !strings.Contains(result.BrokenStructRefs[0], "prd999-missing") {
+		t.Errorf("broken ref should mention prd999-missing, got %q", result.BrokenStructRefs[0])
+	}
+}
+
+func TestCollectAnalyzeResult_BrokenStructRef_MissingRequirement(t *testing.T) {
+	// Not parallel: uses os.Chdir.
+	dir := t.TempDir()
+	orig, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(orig)
+	setupMinimalOODDir(t)
+
+	// prd001 has R1; prd002 struct_refs prd001#R9 which doesn't exist.
+	os.WriteFile("docs/specs/product-requirements/prd001-pkg.yaml", []byte(`id: prd001-pkg
+title: Pkg
+requirements:
+  R1:
+    title: Req 1
+    items:
+      - R1.1: Do X
+`), 0o644)
+	os.WriteFile("docs/specs/product-requirements/prd002-cmd.yaml", []byte(`id: prd002-cmd
+title: Cmd
+struct_refs:
+  - prd_id: prd001-pkg
+    requirement: R9
+`), 0o644)
+
+	o := &Orchestrator{cfg: Config{}}
+	result, _, err := o.collectAnalyzeResult()
+	if err != nil {
+		t.Fatalf("collectAnalyzeResult: %v", err)
+	}
+	if len(result.BrokenStructRefs) != 1 {
+		t.Fatalf("expected 1 broken ref, got %d: %v", len(result.BrokenStructRefs), result.BrokenStructRefs)
+	}
+	if !strings.Contains(result.BrokenStructRefs[0], "R9") {
+		t.Errorf("broken ref should mention R9, got %q", result.BrokenStructRefs[0])
+	}
+}
+
+func TestCollectAnalyzeResult_StructRef_Valid(t *testing.T) {
+	// Not parallel: uses os.Chdir.
+	dir := t.TempDir()
+	orig, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(orig)
+	setupMinimalOODDir(t)
+
+	// prd002 references prd001#R1 which exists — no violation.
+	os.WriteFile("docs/specs/product-requirements/prd001-pkg.yaml", []byte(`id: prd001-pkg
+title: Pkg
+requirements:
+  R1:
+    title: Req 1
+    items:
+      - R1.1: Do X
+`), 0o644)
+	os.WriteFile("docs/specs/product-requirements/prd002-cmd.yaml", []byte(`id: prd002-cmd
+title: Cmd
+struct_refs:
+  - prd_id: prd001-pkg
+    requirement: R1
+`), 0o644)
+
+	o := &Orchestrator{cfg: Config{}}
+	result, _, err := o.collectAnalyzeResult()
+	if err != nil {
+		t.Fatalf("collectAnalyzeResult: %v", err)
+	}
+	if len(result.BrokenStructRefs) != 0 {
+		t.Errorf("expected no broken refs, got %v", result.BrokenStructRefs)
+	}
+}
+
+// --- OOD Check 13: component_dependencies gaps ---
+
+func TestCollectAnalyzeResult_ComponentDepViolation_MissingFromArch(t *testing.T) {
+	// Not parallel: uses os.Chdir.
+	dir := t.TempDir()
+	orig, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(orig)
+	setupMinimalOODDir(t)
+
+	// prd002 depends_on prd001-pkg; architecture has component_dependencies but
+	// "prd001-pkg" doesn't appear in any endpoint — violation.
+	os.WriteFile("docs/specs/product-requirements/prd001-pkg.yaml", []byte(`id: prd001-pkg
+title: Pkg
+`), 0o644)
+	os.WriteFile("docs/specs/product-requirements/prd002-cmd.yaml", []byte(`id: prd002-cmd
+title: Cmd
+depends_on:
+  - prd_id: prd001-pkg
+`), 0o644)
+	os.WriteFile("docs/ARCHITECTURE.yaml", []byte(`id: arch-test
+title: Test Architecture
+overview:
+  summary: test
+  lifecycle: test
+  coordination_pattern: test
+component_dependencies:
+  - from: "cmd/other"
+    to: "pkg/other"
+`), 0o644)
+
+	o := &Orchestrator{cfg: Config{}}
+	result, _, err := o.collectAnalyzeResult()
+	if err != nil {
+		t.Fatalf("collectAnalyzeResult: %v", err)
+	}
+	if len(result.ComponentDepViolations) != 1 {
+		t.Fatalf("expected 1 violation, got %d: %v", len(result.ComponentDepViolations), result.ComponentDepViolations)
+	}
+	if !strings.Contains(result.ComponentDepViolations[0], "prd001-pkg") {
+		t.Errorf("violation should mention prd001-pkg, got %q", result.ComponentDepViolations[0])
+	}
+}
+
+func TestCollectAnalyzeResult_ComponentDepViolation_NoArchDeps(t *testing.T) {
+	// Not parallel: uses os.Chdir.
+	// When architecture has no component_dependencies, skip check — no violation.
+	dir := t.TempDir()
+	orig, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(orig)
+	setupMinimalOODDir(t)
+
+	os.WriteFile("docs/specs/product-requirements/prd001-pkg.yaml", []byte(`id: prd001-pkg
+title: Pkg
+`), 0o644)
+	os.WriteFile("docs/specs/product-requirements/prd002-cmd.yaml", []byte(`id: prd002-cmd
+title: Cmd
+depends_on:
+  - prd_id: prd001-pkg
+`), 0o644)
+	// Architecture with no component_dependencies.
+	os.WriteFile("docs/ARCHITECTURE.yaml", []byte(`id: arch-test
+title: Test Architecture
+overview:
+  summary: test
+  lifecycle: test
+  coordination_pattern: test
+`), 0o644)
+
+	o := &Orchestrator{cfg: Config{}}
+	result, _, err := o.collectAnalyzeResult()
+	if err != nil {
+		t.Fatalf("collectAnalyzeResult: %v", err)
+	}
+	if len(result.ComponentDepViolations) != 0 {
+		t.Errorf("expected no violations when no component_dependencies, got %v", result.ComponentDepViolations)
+	}
+}

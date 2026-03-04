@@ -27,6 +27,10 @@ type AnalyzeResult struct {
 	BrokenCitations                []string // Touchpoints citing non-existent requirement groups in PRDs
 	InvalidReleases                []string // Configured releases not found in road-map.yaml
 	PRDsSpanningMultipleReleases   []string // PRDs referenced by use cases from more than one release
+	DependsOnViolations            []string // depends_on symbols not in referenced package_contract, or prd_id missing
+	DependencyRuleViolations       []string // component_dependencies violating an allowed=false dependency_rule
+	BrokenStructRefs               []string // struct_refs pointing to non-existent PRD or requirement group
+	ComponentDepViolations         []string // depends_on entries not reflected in component_dependencies
 }
 
 // analyzeCounts holds the artifact counts discovered during analysis.
@@ -50,7 +54,10 @@ func (o *Orchestrator) collectAnalyzeResult() (AnalyzeResult, analyzeCounts, err
 		return result, analyzeCounts{}, fmt.Errorf("globbing PRDs: %w", err)
 	}
 	prdIDs := make(map[string]bool)
-	prdReqGroups := make(map[string]map[string]bool) // PRD ID -> set of requirement group keys
+	prdReqGroups := make(map[string]map[string]bool)    // PRD ID -> set of requirement group keys
+	prdExports := make(map[string]map[string]bool)       // PRD ID -> set of exported symbol names
+	prdDependsOn := make(map[string][]PRDDependsOn)      // PRD ID -> depends_on entries
+	prdStructRefs := make(map[string][]PRDStructRef)     // PRD ID -> struct_refs entries
 	for _, path := range prdFiles {
 		id := extractID(path)
 		if id != "" {
@@ -62,9 +69,31 @@ func (o *Orchestrator) collectAnalyzeResult() (AnalyzeResult, analyzeCounts, err
 				groups[groupKey] = true
 			}
 			prdReqGroups[id] = groups
+			if prd.PackageContract != nil {
+				exports := make(map[string]bool)
+				for _, e := range prd.PackageContract.Exports {
+					exports[e.Name] = true
+				}
+				prdExports[id] = exports
+			}
+			if len(prd.DependsOn) > 0 {
+				prdDependsOn[id] = prd.DependsOn
+			}
+			if len(prd.StructRefs) > 0 {
+				prdStructRefs[id] = prd.StructRefs
+			}
 		}
 	}
 	logf("analyze: found %d PRDs", len(prdIDs))
+
+	// 1b. Load ARCHITECTURE.yaml for OOD fields.
+	var archDoc *ArchitectureDoc
+	if data, err := os.ReadFile("docs/ARCHITECTURE.yaml"); err == nil {
+		var doc ArchitectureDoc
+		if err := yaml.Unmarshal(data, &doc); err == nil {
+			archDoc = &doc
+		}
+	}
 
 	// 2. Load all use cases
 	ucFiles, err := filepath.Glob("docs/specs/use-cases/rel*.yaml")
@@ -231,6 +260,97 @@ func (o *Orchestrator) collectAnalyzeResult() (AnalyzeResult, analyzeCounts, err
 	sort.Strings(result.PRDsSpanningMultipleReleases)
 	logf("analyze: PRDs spanning multiple releases found %d", len(result.PRDsSpanningMultipleReleases))
 
+	// Check 10: depends_on — referenced prd_id must exist; symbols_used must be
+	// in the referenced PRD's package_contract.exports (if a contract is declared).
+	for prdID, deps := range prdDependsOn {
+		for _, dep := range deps {
+			if !prdIDs[dep.PRDID] {
+				result.DependsOnViolations = append(result.DependsOnViolations,
+					fmt.Sprintf("%s: depends_on references non-existent PRD %s", prdID, dep.PRDID))
+				continue
+			}
+			exports, hasContract := prdExports[dep.PRDID]
+			if !hasContract {
+				continue // referenced PRD has no package_contract; skip symbol check
+			}
+			for _, sym := range dep.SymbolsUsed {
+				if !exports[sym] {
+					result.DependsOnViolations = append(result.DependsOnViolations,
+						fmt.Sprintf("%s: depends_on %s symbol %q not in package_contract", prdID, dep.PRDID, sym))
+				}
+			}
+		}
+	}
+	sort.Strings(result.DependsOnViolations)
+	logf("analyze: depends_on violations found %d", len(result.DependsOnViolations))
+
+	// Check 11: dependency_rules — component_dependencies entries must not
+	// violate rules with allowed=false. A violation occurs when both from and
+	// to match the rule's From and To prefix patterns.
+	if archDoc != nil {
+		for _, compDep := range archDoc.ComponentDependencies {
+			for _, rule := range archDoc.DependencyRules {
+				if rule.Allowed {
+					continue
+				}
+				if strings.HasPrefix(compDep.From, rule.From) && strings.HasPrefix(compDep.To, rule.To) {
+					result.DependencyRuleViolations = append(result.DependencyRuleViolations,
+						fmt.Sprintf("%s -> %s: violates rule %q (%s)", compDep.From, compDep.To, rule.Description, rule.From+" must not import "+rule.To))
+				}
+			}
+		}
+	}
+	sort.Strings(result.DependencyRuleViolations)
+	logf("analyze: dependency rule violations found %d", len(result.DependencyRuleViolations))
+
+	// Check 12: struct_refs — prd_id must exist and requirement must be a key
+	// in that PRD's requirement groups.
+	for prdID, refs := range prdStructRefs {
+		for _, ref := range refs {
+			if !prdIDs[ref.PRDID] {
+				result.BrokenStructRefs = append(result.BrokenStructRefs,
+					fmt.Sprintf("%s: struct_ref prd_id %s not found", prdID, ref.PRDID))
+				continue
+			}
+			groups := prdReqGroups[ref.PRDID]
+			if ref.Requirement != "" && !groups[ref.Requirement] {
+				result.BrokenStructRefs = append(result.BrokenStructRefs,
+					fmt.Sprintf("%s: struct_ref %s#%s requirement group not found", prdID, ref.PRDID, ref.Requirement))
+			}
+		}
+	}
+	sort.Strings(result.BrokenStructRefs)
+	logf("analyze: broken struct_refs found %d", len(result.BrokenStructRefs))
+
+	// Check 13: component_dependencies — if the architecture declares
+	// component_dependencies, every PRD ID referenced in any depends_on entry
+	// must appear as a substring in at least one component_dependency endpoint.
+	// This catches depends_on declarations that were never added to the arch graph.
+	if archDoc != nil && len(archDoc.ComponentDependencies) > 0 {
+		compDepEndpoints := make(map[string]bool)
+		for _, cd := range archDoc.ComponentDependencies {
+			compDepEndpoints[cd.From] = true
+			compDepEndpoints[cd.To] = true
+		}
+		for prdID, deps := range prdDependsOn {
+			for _, dep := range deps {
+				found := false
+				for endpoint := range compDepEndpoints {
+					if strings.Contains(endpoint, dep.PRDID) || strings.Contains(dep.PRDID, endpoint) {
+						found = true
+						break
+					}
+				}
+				if !found {
+					result.ComponentDepViolations = append(result.ComponentDepViolations,
+						fmt.Sprintf("%s: depends_on %s not reflected in component_dependencies", prdID, dep.PRDID))
+				}
+			}
+		}
+	}
+	sort.Strings(result.ComponentDepViolations)
+	logf("analyze: component_dep violations found %d", len(result.ComponentDepViolations))
+
 	// Check 7: YAML schema validation — load all docs into typed structs
 	// with strict field checking. Unknown YAML fields indicate a schema
 	// mismatch that will cause data loss during measure prompt assembly.
@@ -286,6 +406,10 @@ func (r AnalyzeResult) printReport(prdCount, ucCount, tsCount int) error {
 	hasIssues = printSection("Broken citations (touchpoint cites non-existent requirement group)", r.BrokenCitations) || hasIssues
 	hasIssues = printSection("Invalid configured releases (not found in road-map.yaml)", r.InvalidReleases) || hasIssues
 	hasIssues = printSection("PRDs spanning multiple releases (each PRD must belong to exactly one release)", r.PRDsSpanningMultipleReleases) || hasIssues
+	hasIssues = printSection("depends_on violations (symbol not in package_contract or prd_id missing)", r.DependsOnViolations) || hasIssues
+	hasIssues = printSection("Dependency rule violations (component_dependency violates allowed=false rule)", r.DependencyRuleViolations) || hasIssues
+	hasIssues = printSection("Broken struct_refs (prd_id or requirement group not found)", r.BrokenStructRefs) || hasIssues
+	hasIssues = printSection("component_dependencies gaps (depends_on entries missing from component_dependencies)", r.ComponentDepViolations) || hasIssues
 
 	if !hasIssues {
 		fmt.Printf("\n✅ All consistency checks passed\n")

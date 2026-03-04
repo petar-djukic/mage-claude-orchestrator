@@ -280,6 +280,9 @@ func (Stats) Tokens() error { return newOrch().TokenStats() }
 // Outcomes prints a summary table of task outcome trailers from git history.
 func (Stats) Outcomes() error { return newOrch().Outcomes() }
 
+// Generator prints a live status report for the current generation run.
+func (Stats) Generator() error { return newOrch().GeneratorStats() }
+
 // --- Prompt targets ---
 
 // Measure prints the assembled measure prompt to stdout.

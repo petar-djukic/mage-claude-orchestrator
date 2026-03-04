@@ -653,3 +653,38 @@ func TestCommentCobblerIssue_ZeroNumber_NoOp(t *testing.T) {
 	commentCobblerIssue("petar-djukic/cobbler-scaffold", 0, "test body")  // must not panic
 	commentCobblerIssue("", 1, "test body")                                // must not panic
 }
+
+// --- sub-issue linking (GH-566) ---
+
+// TestExtractParentIssueNumber covers the generation name parsing logic (GH-566).
+func TestExtractParentIssueNumber(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		generation string
+		want       int
+	}{
+		{"generation-gh-206-some-slug", 206},
+		{"generation-gh-1-x", 1},
+		{"generation-gh-566-link-sub-issues", 566},
+		{"generation-2026-03-04-12-00-00", 0}, // no gh- marker
+		{"", 0},
+		{"generation-gh-abc-slug", 0}, // non-numeric
+		{"generation-gh--slug", 0},    // empty number
+	}
+	for _, tc := range tests {
+		got := extractParentIssueNumber(tc.generation)
+		if got != tc.want {
+			t.Errorf("extractParentIssueNumber(%q) = %d, want %d", tc.generation, got, tc.want)
+		}
+	}
+}
+
+// TestLinkSubIssue_FakeRepo_Error verifies linkSubIssue returns an error (not
+// panic) when the GitHub CLI fails on a fake repo (GH-566).
+func TestLinkSubIssue_FakeRepo_Error(t *testing.T) {
+	t.Parallel()
+	err := linkSubIssue("fake/repo-that-does-not-exist", 1, 99999)
+	if err == nil {
+		t.Error("linkSubIssue with fake repo must return an error")
+	}
+}

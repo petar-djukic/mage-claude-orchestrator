@@ -252,7 +252,64 @@ func createCobblerIssue(repo, generation string, issue proposedIssue) (int, erro
 	}
 	logf("createCobblerIssue: created #%d %q gen=%s index=%d dep=%d",
 		number, issue.Title, generation, issue.Index, issue.Dependency)
+
+	// Link as sub-issue of the parent, if the generation name encodes one (GH-566).
+	if parentNumber := extractParentIssueNumber(generation); parentNumber > 0 {
+		if err := linkSubIssue(repo, parentNumber, number); err != nil {
+			logf("createCobblerIssue: linkSubIssue warning for #%d -> parent #%d: %v", number, parentNumber, err)
+		}
+	}
+
 	return number, nil
+}
+
+// extractParentIssueNumber parses a GitHub issue number from a generation name
+// that follows the pattern "...-gh-<N>-..." (e.g., "generation-gh-206-slug"
+// → 206). Returns 0 if the pattern is not found.
+func extractParentIssueNumber(generation string) int {
+	const marker = "-gh-"
+	idx := strings.Index(generation, marker)
+	if idx < 0 {
+		return 0
+	}
+	rest := generation[idx+len(marker):]
+	var n int
+	if _, err := fmt.Sscanf(rest, "%d", &n); err != nil || n <= 0 {
+		return 0
+	}
+	return n
+}
+
+// linkSubIssue attaches childNumber as a GitHub sub-issue of parentNumber.
+// It first fetches the child's database ID, then POSTs to the sub_issues API.
+// Errors are returned so the caller can log them as warnings.
+func linkSubIssue(repo string, parentNumber, childNumber int) error {
+	// Fetch the child issue's database ID (different from the display number).
+	dbIDOut, err := exec.Command(binGh, "api",
+		fmt.Sprintf("repos/%s/issues/%d", repo, childNumber),
+		"--jq", ".id",
+	).Output()
+	if err != nil {
+		return fmt.Errorf("fetching database id for #%d: %w", childNumber, err)
+	}
+	dbIDStr := strings.TrimSpace(string(dbIDOut))
+	var dbID int
+	if _, err := fmt.Sscanf(dbIDStr, "%d", &dbID); err != nil || dbID <= 0 {
+		return fmt.Errorf("parsing database id %q for #%d: %w", dbIDStr, childNumber, err)
+	}
+
+	// POST to the parent's sub_issues endpoint.
+	out, err := exec.Command(binGh, "api",
+		fmt.Sprintf("repos/%s/issues/%d/sub_issues", repo, parentNumber),
+		"--method", "POST",
+		"--field", fmt.Sprintf("sub_issue_id=%d", dbID),
+	).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("linking #%d as sub-issue of #%d: %w (output: %s)",
+			childNumber, parentNumber, err, strings.TrimSpace(string(out)))
+	}
+	logf("linkSubIssue: linked #%d as sub-issue of #%d", childNumber, parentNumber)
+	return nil
 }
 
 // parseIssueURL extracts a GitHub issue number from a URL string like

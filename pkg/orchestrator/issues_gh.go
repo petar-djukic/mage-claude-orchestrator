@@ -382,6 +382,9 @@ func pickReadyIssue(repo, generation string) (cobblerIssue, error) {
 	if err := addIssueLabel(repo, picked.Number, cobblerLabelInProgress); err != nil {
 		logf("pickReadyIssue: add in-progress label to #%d: %v", picked.Number, err)
 	}
+	if err := removeIssueLabel(repo, picked.Number, cobblerLabelReady); err != nil {
+		logf("pickReadyIssue: remove ready label from #%d: %v", picked.Number, err)
+	}
 	logf("pickReadyIssue: picked #%d %q gen=%s", picked.Number, picked.Title, generation)
 	return picked, nil
 }
@@ -389,6 +392,9 @@ func pickReadyIssue(repo, generation string) (cobblerIssue, error) {
 // closeCobblerIssue closes a GitHub issue and re-runs promoteReadyIssues so
 // any unblocked issues become ready.
 func closeCobblerIssue(repo string, number int, generation string) error {
+	if err := removeIssueLabel(repo, number, cobblerLabelInProgress); err != nil {
+		logf("closeCobblerIssue: remove in-progress label from #%d: %v", number, err)
+	}
 	if err := exec.Command(binGh, "issue", "close",
 		"--repo", repo,
 		fmt.Sprintf("%d", number),

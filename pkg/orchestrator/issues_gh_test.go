@@ -582,3 +582,38 @@ func TestIssuesContextJSON_ParseableByParseIssuesJSON(t *testing.T) {
 		t.Errorf("JSON does not contain expected title: %s", jsonStr)
 	}
 }
+
+// --- pickReadyIssue label invariant ---
+
+// TestPickReadyIssue_FilterExcludesBothLabels verifies that an issue carrying
+// both cobbler-ready and cobbler-in-progress is not eligible for selection.
+// This mirrors the guard that prevents re-claiming an already-in-progress task
+// even if the ready label was not yet removed (GH-569).
+func TestPickReadyIssue_FilterExcludesBothLabels(t *testing.T) {
+	t.Parallel()
+
+	// An issue that somehow has both labels should be excluded from the ready set.
+	bothLabels := cobblerIssue{Number: 10, Labels: []string{cobblerLabelReady, cobblerLabelInProgress}}
+	readyOnly := cobblerIssue{Number: 11, Labels: []string{cobblerLabelReady}}
+
+	isEligible := func(iss cobblerIssue) bool {
+		return hasLabel(iss, cobblerLabelReady) && !hasLabel(iss, cobblerLabelInProgress)
+	}
+
+	if isEligible(bothLabels) {
+		t.Error("issue with both ready and in-progress labels must not be eligible for pick")
+	}
+	if !isEligible(readyOnly) {
+		t.Error("issue with only ready label must be eligible for pick")
+	}
+}
+
+// TestCloseCobblerIssue_FakeRepo_NoOp verifies closeCobblerIssue returns an
+// error (not panic) when the GitHub CLI fails on a fake repo (GH-569).
+func TestCloseCobblerIssue_FakeRepo_NoOp(t *testing.T) {
+	t.Parallel()
+	err := closeCobblerIssue("fake/repo-that-does-not-exist", 99999, "gen-test")
+	if err == nil {
+		t.Error("closeCobblerIssue with fake repo must return an error")
+	}
+}

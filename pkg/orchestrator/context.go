@@ -170,18 +170,21 @@ type RelatedProject struct {
 
 // ArchitectureDoc corresponds to docs/ARCHITECTURE.yaml.
 type ArchitectureDoc struct {
-	File                 string          `yaml:"file,omitempty"`
-	ID                   string          `yaml:"id"`
-	Title                string          `yaml:"title"`
-	Overview             ArchOverview    `yaml:"overview"`
-	Interfaces           []ArchInterface `yaml:"interfaces"`
-	Components           []ArchComponent `yaml:"components"`
-	DesignDecisions      []ArchDecision  `yaml:"design_decisions"`
-	TechnologyChoices    []ArchTech      `yaml:"technology_choices"`
-	ProjectStructure     []ArchPathRole  `yaml:"project_structure"`
-	ImplementationStatus ArchImplStatus  `yaml:"implementation_status"`
-	RelatedDocuments     []ArchReference `yaml:"related_documents"`
-	Figures              []ArchFigure    `yaml:"figures,omitempty"`
+	File                   string                    `yaml:"file,omitempty"`
+	ID                     string                    `yaml:"id"`
+	Title                  string                    `yaml:"title"`
+	Overview               ArchOverview              `yaml:"overview"`
+	Interfaces             []ArchInterface           `yaml:"interfaces"`
+	Components             []ArchComponent           `yaml:"components"`
+	DesignDecisions        []ArchDecision            `yaml:"design_decisions"`
+	TechnologyChoices      []ArchTech                `yaml:"technology_choices"`
+	ProjectStructure       []ArchPathRole            `yaml:"project_structure"`
+	ImplementationStatus   ArchImplStatus            `yaml:"implementation_status"`
+	RelatedDocuments       []ArchReference           `yaml:"related_documents"`
+	Figures                []ArchFigure              `yaml:"figures,omitempty"`
+	DependencyRules        []ArchDependencyRule      `yaml:"dependency_rules,omitempty"`
+	SharedProtocols        []ArchSharedProtocol      `yaml:"shared_protocols,omitempty"`
+	ComponentDependencies  []ArchComponentDependency `yaml:"component_dependencies,omitempty"`
 }
 
 type ArchOverview struct {
@@ -241,6 +244,28 @@ type ArchReference struct {
 type ArchFigure struct {
 	Path    string `yaml:"path"`
 	Caption string `yaml:"caption"`
+}
+
+// ArchDependencyRule encodes a layering constraint between package groups.
+// Allowed=false means From must not import To.
+type ArchDependencyRule struct {
+	Description string `yaml:"description"`
+	From        string `yaml:"from"`
+	To          string `yaml:"to"`
+	Allowed     bool   `yaml:"allowed"`
+}
+
+// ArchSharedProtocol describes a cross-cutting pattern all commands must follow.
+type ArchSharedProtocol struct {
+	Name        string `yaml:"name"`
+	Description string `yaml:"description"`
+	Pattern     string `yaml:"pattern,omitempty"`
+}
+
+// ArchComponentDependency is one directed edge in the package-level import graph.
+type ArchComponentDependency struct {
+	From string `yaml:"from"`
+	To   string `yaml:"to"`
 }
 
 // ---------------------------------------------------------------------------
@@ -347,15 +372,18 @@ type SpecsCollection struct {
 // Requirements use a map keyed by group ID (R1, R2, ...).
 // AcceptanceCriteria are plain strings.
 type PRDDoc struct {
-	File               string                        `yaml:"file,omitempty"`
-	ID                 string                        `yaml:"id"`
-	Title              string                        `yaml:"title"`
-	Problem            string                        `yaml:"problem"`
-	Goals              []map[string]string           `yaml:"goals"`
+	File               string                         `yaml:"file,omitempty"`
+	ID                 string                         `yaml:"id"`
+	Title              string                         `yaml:"title"`
+	Problem            string                         `yaml:"problem"`
+	Goals              []map[string]string            `yaml:"goals"`
 	Requirements       map[string]PRDRequirementGroup `yaml:"requirements"`
-	NonGoals           []string                      `yaml:"non_goals"`
-	AcceptanceCriteria []string                      `yaml:"acceptance_criteria"`
-	References         []string                      `yaml:"references,omitempty"`
+	NonGoals           []string                       `yaml:"non_goals"`
+	AcceptanceCriteria []string                       `yaml:"acceptance_criteria"`
+	References         []string                       `yaml:"references,omitempty"`
+	PackageContract    *PRDPackageContract            `yaml:"package_contract,omitempty"`
+	DependsOn          []PRDDependsOn                 `yaml:"depends_on,omitempty"`
+	StructRefs         []PRDStructRef                 `yaml:"struct_refs,omitempty"`
 }
 
 // PRDRequirementGroup is a requirement section within a PRD.
@@ -365,6 +393,33 @@ type PRDRequirementGroup struct {
 	Items []map[string]string `yaml:"items"`
 }
 
+// PRDPackageContract describes the public API surface of a pkg/ package.
+type PRDPackageContract struct {
+	Exports           []PRDExport `yaml:"exports,omitempty"`
+	Imports           []string    `yaml:"imports,omitempty"`
+	ImportConstraints []string    `yaml:"import_constraints,omitempty"`
+}
+
+// PRDExport is a single exported symbol with its signature.
+type PRDExport struct {
+	Name      string `yaml:"name"`
+	Signature string `yaml:"signature,omitempty"`
+}
+
+// PRDDependsOn declares that a cmd/ PRD depends on a pkg/ PRD,
+// listing the specific symbols consumed.
+type PRDDependsOn struct {
+	PRDID       string   `yaml:"prd_id"`
+	SymbolsUsed []string `yaml:"symbols_used,omitempty"`
+}
+
+// PRDStructRef cross-references a type definition in another PRD
+// to avoid inline duplication.
+type PRDStructRef struct {
+	PRDID       string `yaml:"prd_id"`
+	Requirement string `yaml:"requirement"`
+}
+
 // ---------------------------------------------------------------------------
 // Use case
 // ---------------------------------------------------------------------------
@@ -372,19 +427,28 @@ type PRDRequirementGroup struct {
 // UseCaseDoc corresponds to docs/specs/use-cases/rel*.yaml.
 // Flow, touchpoints, and success_criteria use "- KEY: text" format.
 type UseCaseDoc struct {
-	File            string              `yaml:"file,omitempty"`
-	ID              string              `yaml:"id"`
-	Title           string              `yaml:"title"`
-	Summary         string              `yaml:"summary"`
-	Actor           string              `yaml:"actor"`
-	Trigger         string              `yaml:"trigger"`
-	Flow            []map[string]string `yaml:"flow"`
-	Touchpoints     []map[string]string `yaml:"touchpoints"`
-	SuccessCriteria []map[string]string `yaml:"success_criteria"`
-	Dependencies    []map[string]string `yaml:"dependencies,omitempty"`
-	Risks           []map[string]string `yaml:"risks,omitempty"`
-	OutOfScope      []string            `yaml:"out_of_scope"`
-	TestSuite       string              `yaml:"test_suite,omitempty"`
+	File                string               `yaml:"file,omitempty"`
+	ID                  string               `yaml:"id"`
+	Title               string               `yaml:"title"`
+	Summary             string               `yaml:"summary"`
+	Actor               string               `yaml:"actor"`
+	Trigger             string               `yaml:"trigger"`
+	Flow                []map[string]string  `yaml:"flow"`
+	Touchpoints         []map[string]string  `yaml:"touchpoints"`
+	SuccessCriteria     []map[string]string  `yaml:"success_criteria"`
+	Dependencies        []map[string]string  `yaml:"dependencies,omitempty"`
+	Risks               []map[string]string  `yaml:"risks,omitempty"`
+	OutOfScope          []string             `yaml:"out_of_scope"`
+	TestSuite           string               `yaml:"test_suite,omitempty"`
+	InteractionSequence []UCInteractionStep  `yaml:"interaction_sequence,omitempty"`
+}
+
+// UCInteractionStep is one structured caller/callee/step tuple in an
+// interaction_sequence, replacing prose descriptions in flow entries.
+type UCInteractionStep struct {
+	Caller string `yaml:"caller"`
+	Callee string `yaml:"callee"`
+	Step   string `yaml:"step"`
 }
 
 // ---------------------------------------------------------------------------

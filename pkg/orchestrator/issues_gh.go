@@ -19,6 +19,7 @@ import (
 type cobblerIssue struct {
 	Number      int    // GitHub issue number
 	Title       string // Issue title
+	State       string // "open" or "closed"
 	Index       int    // cobbler_index from front-matter
 	DependsOn   int    // cobbler_depends_on (-1 = no dependency)
 	Generation  string // cobbler_generation label value
@@ -350,12 +351,51 @@ func listOpenCobblerIssues(repo, generation string) ([]cobblerIssue, error) {
 	return parseCobblerIssuesJSON(out)
 }
 
+// listAllCobblerIssues returns all GitHub issues (open and closed) for a
+// generation. Used by GeneratorStats to report completed tasks.
+func listAllCobblerIssues(repo, generation string) ([]cobblerIssue, error) {
+	label := cobblerGenLabel(generation)
+	out, err := exec.Command(binGh, "api",
+		"--method", "GET",
+		fmt.Sprintf("repos/%s/issues", repo),
+		"-f", "state=all",
+		"-f", "labels="+label,
+		"-f", "per_page=100",
+	).Output()
+	if err != nil {
+		return nil, fmt.Errorf("gh api repos issues: %w", err)
+	}
+	return parseCobblerIssuesJSON(out)
+}
+
+// fetchIssueComments returns the body text of all comments on the given issue.
+func fetchIssueComments(repo string, number int) ([]string, error) {
+	out, err := exec.Command(binGh, "api",
+		fmt.Sprintf("repos/%s/issues/%d/comments", repo, number),
+	).Output()
+	if err != nil {
+		return nil, fmt.Errorf("gh api issue comments for #%d: %w", number, err)
+	}
+	var raw []struct {
+		Body string `json:"body"`
+	}
+	if err := json.Unmarshal(out, &raw); err != nil {
+		return nil, fmt.Errorf("parsing issue comments for #%d: %w", number, err)
+	}
+	bodies := make([]string, 0, len(raw))
+	for _, r := range raw {
+		bodies = append(bodies, r.Body)
+	}
+	return bodies, nil
+}
+
 // parseCobblerIssuesJSON parses the JSON output from the GitHub REST API issues
 // endpoint into a slice of cobblerIssue structs.
 func parseCobblerIssuesJSON(data []byte) ([]cobblerIssue, error) {
 	var raw []struct {
 		Number int    `json:"number"`
 		Title  string `json:"title"`
+		State  string `json:"state"`
 		Body   string `json:"body"`
 		Labels []struct {
 			Name string `json:"name"`
@@ -375,6 +415,7 @@ func parseCobblerIssuesJSON(data []byte) ([]cobblerIssue, error) {
 		issues = append(issues, cobblerIssue{
 			Number:      r.Number,
 			Title:       r.Title,
+			State:       r.State,
 			Index:       fm.Index,
 			DependsOn:   fm.DependsOn,
 			Generation:  fm.Generation,

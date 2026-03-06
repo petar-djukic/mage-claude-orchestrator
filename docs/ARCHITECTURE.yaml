@@ -83,6 +83,9 @@ interfaces:
       - "GeneratorReset(): destroy all generations, return to clean main (prd002)"
       - "GeneratorList(): show active and past generations (prd002)"
       - "GeneratorSwitch(): switch between generation branches (prd002)"
+      - "GeneratorStats(): print status report for the current generation run (stats:generator target)"
+      - "ReleaseUpdate(version string) error: mark a release complete — set UC statuses to implemented, remove from project.releases in configuration.yaml (release:update target)"
+      - "ReleaseClear(version string) error: reverse ReleaseUpdate — reset UC statuses to spec_complete, re-add to project.releases (release:clear target)"
       - "Measure(): propose tasks via Claude (prd003)"
       - "Stitch(): execute ready tasks in worktrees (prd003)"
       - "Stats(): print LOC and documentation metrics (prd005)"
@@ -243,13 +246,16 @@ components:
     responsibility: |
       Cross-artifact consistency checking. Validates that PRDs, use cases, and test suites
       are properly linked and complete. Reports orphaned PRDs, missing test suites, broken
-      touchpoints, and use cases not in the roadmap.
+      touchpoints, use cases not in the roadmap, schema drift, and semantic model violations.
     capabilities:
       - Load and index all PRDs, use cases, test suites, and roadmap entries
       - Check PRD-to-use-case traceability via touchpoints
       - Check use-case-to-test-suite linkage
       - Identify orphaned artifacts and broken references
-      - Generate detailed consistency report
+      - Validate YAML schemas against typed structs (strict field checking)
+      - Detect constitution drift between docs/constitutions/ and embedded copies
+      - Validate semantic models — SM1 (four required sections), SM3 (feature source traceability), SM7 (name/semver) — in standalone files, PRD shorthand, and prompt full-format
+      - Generate detailed consistency report with artifact counts
     references:
       - Similar to spec-kit analyze functionality
 
@@ -680,13 +686,15 @@ project_structure:
   - path: pkg/orchestrator/codestatus.go
     role: Code implementation status — scan tests/ for use-case test directories, compare roadmap spec status with test file presence, detect spec-vs-code gaps
   - path: pkg/orchestrator/compare.go
-    role: Cross-generation differential comparison — binary resolution, build, and Compare() entry point (prd004 R1-R3)
-  - path: pkg/orchestrator/testloader.go
-    role: YAML test suite loader and differential binary runner for cross-generation comparison (prd004 R4-R6)
+    role: Cross-generation differential comparison — binary resolution, build, Compare() entry point, YAML test suite loading, and differential binary runner (prd004)
   - path: pkg/orchestrator/outcomes.go
     role: Outcome trailer parsing — scan git history for task metrics (tokens, LOC, cost, duration)
   - path: pkg/orchestrator/prompt_files.go
     role: Context file enumeration — list files included in Claude prompts with sizes and token estimates
+  - path: pkg/orchestrator/generator_stats.go
+    role: Generation status report — summarize open/closed issues, cycle counts, and token usage for the current generation run (stats:generator target)
+  - path: pkg/orchestrator/release.go
+    role: Release lifecycle management — ReleaseUpdate sets UC statuses to implemented and removes a release from configuration.yaml; ReleaseClear reverses it (release:update/clear targets)
   - path: pkg/orchestrator/token_stats.go
     role: Token statistics — enumerate context files by category with byte sizes, optional Anthropic Token Counting API for exact prompt token counts
   - path: pkg/orchestrator/Dockerfile.claude
@@ -720,6 +728,8 @@ implementation_status:
     - done: Orchestrator-managed git commits in stitch worktrees
     - done: Phase-specific context file loading (PhaseContext override mechanism)
     - done: VS Code extension — lifecycle commands, generation browser, branch comparison, issue tracker, metrics dashboard, specification browser
+    - done: Semantic model validation in mage analyze (SM1 sections, SM3 traceability, SM7 naming/semver)
+    - done: Release lifecycle management (ReleaseUpdate/ReleaseClear — road-map.yaml and configuration.yaml mutation)
 
 related_documents:
   - doc: docs/VISION.yaml

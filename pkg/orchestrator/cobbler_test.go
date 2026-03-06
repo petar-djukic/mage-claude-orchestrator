@@ -738,6 +738,21 @@ func TestBuildDirectCmd_NoVolumeMount(t *testing.T) {
 	}
 }
 
+func TestBuildDirectCmd_StripsCLAUDECODE(t *testing.T) {
+	t.Setenv("CLAUDECODE", "1")
+	o := New(Config{})
+	cmd := o.buildDirectCmd(context.TODO(), "/work")
+
+	for _, e := range cmd.Env {
+		if strings.HasPrefix(e, "CLAUDECODE=") {
+			t.Errorf("buildDirectCmd should strip CLAUDECODE from env; found %q", e)
+		}
+	}
+	if cmd.Env == nil {
+		t.Error("buildDirectCmd should set cmd.Env (not nil) when stripping CLAUDECODE")
+	}
+}
+
 // --- effectiveMode ---
 
 func TestEffectiveMode_DefaultIsPodman(t *testing.T) {

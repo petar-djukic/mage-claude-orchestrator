@@ -220,6 +220,36 @@ document_types:
       status. Use cases are assigned to releases. Release numbering: rel[NN].[N]
       (major.minor). Minor releases validate completed major releases.
 
+  generation_run_report:
+    location: "docs/reports/generation-run-[N].md (e.g., generation-run-15.md)"
+    format_rule: generation-run-report-format
+    required_fields:
+      - "title: 'Generation Run [N]: [total LOC] LOC, $[total cost] — [one-line summary]'"
+      - "Configuration section: generation branch name, base branch, cobbler version,
+          model, max_turns, preserve_sources flag, issues_repo"
+      - "Cycle-by-cycle results section: table with columns cycle, issue title, status
+          (pass/fail/restart), stitch turns used, input tokens, output tokens,
+          cost USD, LOC delta"
+      - "Measure cycles section: table with columns cycle, issues proposed, input
+          tokens, output tokens, cost USD"
+      - "Cost analysis section: total input tokens, total output tokens, total cost USD,
+          total LOC produced, cost per KLOC; comparison table against prior runs
+          (run number, date, total LOC, total cost, cost/KLOC)"
+      - "Generated packages section: list of packages or modules produced with their LOC"
+      - "Failures and restarts section: for each failed stitch, the issue title, error
+          summary, and whether it was retried or abandoned"
+    purpose: |
+      Captures the full accounting of a completed generation run so that cost
+      trends, failure patterns, and per-package productivity can be tracked
+      across runs. Written once per generation after generator:stop completes.
+
+      Data source: before writing the report, read all history files from the
+      generation branch's merged tag (.cobbler/history/ under the
+      <generation-branch>-merged git tag): *-stitch-stats.yaml,
+      *-measure-stats.yaml, and *-stitch-report.yaml. These files contain
+      per-cycle token counts, costs, LOC deltas, and failure records.
+      Do not estimate; read the files.
+
 naming_conventions:
   prd: "prd[NNN]-[feature-name].yaml (e.g., prd001-cupboard-core.yaml)"
   use_case: "rel[NN].[N]-uc[NNN]-[short-name].yaml (e.g., rel01.0-uc001-cupboard-lifecycle.yaml)"

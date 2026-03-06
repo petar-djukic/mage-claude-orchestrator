@@ -4,25 +4,35 @@
 package orchestrator
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	claudesdk "github.com/schlunsen/claude-agent-sdk-go"
+	claudetypes "github.com/schlunsen/claude-agent-sdk-go/types"
 )
+
+// sdkQueryFunc is the function signature for claudesdk.Query.
+// Storing it on the Orchestrator allows tests to inject a fake without a
+// real Claude binary.
+type sdkQueryFunc func(ctx context.Context, prompt string, opts *claudetypes.ClaudeAgentOptions) (<-chan claudetypes.Message, error)
 
 // Orchestrator provides Claude Code orchestration operations.
 // Create one with New() and call its methods from mage targets.
 type Orchestrator struct {
-	cfg Config
+	cfg        Config
+	sdkQueryFn sdkQueryFunc
 }
 
 // New creates an Orchestrator with the given configuration.
 // It applies defaults to any zero-value Config fields.
 func New(cfg Config) *Orchestrator {
 	cfg.applyDefaults()
-	return &Orchestrator{cfg: cfg}
+	return &Orchestrator{cfg: cfg, sdkQueryFn: claudesdk.Query}
 }
 
 // Config returns a copy of the Orchestrator's configuration.

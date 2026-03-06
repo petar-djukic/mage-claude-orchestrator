@@ -7,14 +7,18 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	claudetypes "github.com/schlunsen/claude-agent-sdk-go/types"
 	"gopkg.in/yaml.v3"
 )
 
@@ -1444,6 +1448,204 @@ func TestNew_RespectsExplicitIdleTimeout(t *testing.T) {
 	o := New(Config{Cobbler: CobblerConfig{IdleTimeoutSeconds: 120}})
 	if o.cfg.Cobbler.IdleTimeoutSeconds != 120 {
 		t.Errorf("IdleTimeoutSeconds = %d, want 120", o.cfg.Cobbler.IdleTimeoutSeconds)
+	}
+}
+
+// --- runClaudeSDK ---
+
+// fakeSdkQuery returns a sdkQueryFunc that immediately sends msgs on a
+// buffered channel and closes it. Use for success-path and error-path tests.
+func fakeSdkQuery(msgs ...claudetypes.Message) sdkQueryFunc {
+	return func(_ context.Context, _ string, _ *claudetypes.ClaudeAgentOptions) (<-chan claudetypes.Message, error) {
+		ch := make(chan claudetypes.Message, len(msgs))
+		for _, m := range msgs {
+			ch <- m
+		}
+		close(ch)
+		return ch, nil
+	}
+}
+
+// assistantMsg builds an AssistantMessage containing a single TextBlock.
+func assistantMsg(text string) *claudetypes.AssistantMessage {
+	return &claudetypes.AssistantMessage{
+		Content: []claudetypes.ContentBlock{
+			&claudetypes.TextBlock{Text: text},
+		},
+	}
+}
+
+// resultMsg builds a ResultMessage with the given token counts and cost.
+func resultMsg(input, output int, costUSD float64) *claudetypes.ResultMessage {
+	return &claudetypes.ResultMessage{
+		TotalCostUSD: &costUSD,
+		Usage: map[string]interface{}{
+			"input_tokens":  float64(input),
+			"output_tokens": float64(output),
+		},
+	}
+}
+
+// newSDKOrchestrator creates an Orchestrator wired to the given fake query
+// function. The config has no real paths; only fields consumed by
+// runClaudeSDK are relevant.
+func newSDKOrchestrator(fn sdkQueryFunc) *Orchestrator {
+	o := New(Config{})
+	o.sdkQueryFn = fn
+	return o
+}
+
+func TestRunClaudeSDK_Success(t *testing.T) {
+	t.Parallel()
+	const wantText = "hello from sdk"
+	o := newSDKOrchestrator(fakeSdkQuery(
+		assistantMsg(wantText),
+		resultMsg(10, 20, 0.0042),
+	))
+	res, err := o.runClaudeSDK(context.Background(), "prompt", t.TempDir(), true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if string(res.RawOutput) != wantText {
+		t.Errorf("RawOutput = %q; want %q", res.RawOutput, wantText)
+	}
+	if res.InputTokens != 10 {
+		t.Errorf("InputTokens = %d; want 10", res.InputTokens)
+	}
+	if res.OutputTokens != 20 {
+		t.Errorf("OutputTokens = %d; want 20", res.OutputTokens)
+	}
+	if res.CostUSD == 0 {
+		t.Error("CostUSD should be non-zero")
+	}
+}
+
+func TestRunClaudeSDK_QueryError(t *testing.T) {
+	t.Parallel()
+	wantErr := errors.New("sdk connection refused")
+	o := newSDKOrchestrator(func(_ context.Context, _ string, _ *claudetypes.ClaudeAgentOptions) (<-chan claudetypes.Message, error) {
+		return nil, wantErr
+	})
+	_, err := o.runClaudeSDK(context.Background(), "prompt", t.TempDir(), true)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, wantErr) {
+		t.Errorf("error = %v; want to wrap %v", err, wantErr)
+	}
+}
+
+func TestRunClaudeSDK_NoResultMessage(t *testing.T) {
+	t.Parallel()
+	// Channel closes with only an AssistantMessage — no ResultMessage.
+	o := newSDKOrchestrator(fakeSdkQuery(assistantMsg("partial")))
+	_, err := o.runClaudeSDK(context.Background(), "prompt", t.TempDir(), true)
+	if err == nil {
+		t.Fatal("expected error for missing ResultMessage, got nil")
+	}
+	if !strings.Contains(err.Error(), "no result") {
+		t.Errorf("error = %q; want 'no result' message", err)
+	}
+}
+
+func TestRunClaudeSDK_IsError(t *testing.T) {
+	t.Parallel()
+	rm := resultMsg(0, 0, 0)
+	rm.IsError = true
+	o := newSDKOrchestrator(fakeSdkQuery(rm))
+	_, err := o.runClaudeSDK(context.Background(), "prompt", t.TempDir(), true)
+	if err == nil {
+		t.Fatal("expected error for IsError=true result, got nil")
+	}
+}
+
+func TestRunClaudeSDK_ContextCancellation(t *testing.T) {
+	t.Parallel()
+	// The fake blocks until ctx is done, then closes the channel.
+	slow := func(ctx context.Context, _ string, _ *claudetypes.ClaudeAgentOptions) (<-chan claudetypes.Message, error) {
+		ch := make(chan claudetypes.Message)
+		go func() {
+			<-ctx.Done()
+			close(ch)
+		}()
+		return ch, nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	o := newSDKOrchestrator(slow)
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := o.runClaudeSDK(ctx, "prompt", t.TempDir(), true)
+		done <- err
+	}()
+
+	cancel()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Error("expected error after context cancellation, got nil")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("runClaudeSDK did not return within 3s after context cancellation")
+	}
+}
+
+func TestRunClaudeSDK_MaxTurnsArgParsed(t *testing.T) {
+	t.Parallel()
+	var gotMaxTurns int
+	capture := func(_ context.Context, _ string, opts *claudetypes.ClaudeAgentOptions) (<-chan claudetypes.Message, error) {
+		if opts.MaxTurns != nil {
+			gotMaxTurns = *opts.MaxTurns
+		}
+		ch := make(chan claudetypes.Message, 1)
+		ch <- resultMsg(0, 0, 0)
+		close(ch)
+		return ch, nil
+	}
+	o := newSDKOrchestrator(capture)
+	_, err := o.runClaudeSDK(context.Background(), "prompt", t.TempDir(), true, "--max-turns", "7")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotMaxTurns != 7 {
+		t.Errorf("MaxTurns = %d; want 7", gotMaxTurns)
+	}
+}
+
+func TestRunClaudeSDK_ConcurrentCalls_Race(t *testing.T) {
+	t.Parallel()
+	// Inject CLAUDECODE into the process env so sdkEnvMu unset/restore path
+	// is exercised. Run multiple concurrent calls; -race catches any data races.
+	if err := os.Setenv("CLAUDECODE", "1"); err != nil {
+		t.Fatalf("setenv: %v", err)
+	}
+	t.Cleanup(func() { os.Unsetenv("CLAUDECODE") })
+
+	fn := func(_ context.Context, _ string, _ *claudetypes.ClaudeAgentOptions) (<-chan claudetypes.Message, error) {
+		// Yield briefly so goroutines genuinely overlap.
+		time.Sleep(2 * time.Millisecond)
+		ch := make(chan claudetypes.Message, 1)
+		ch <- resultMsg(1, 1, 0)
+		close(ch)
+		return ch, nil
+	}
+
+	const n = 8
+	var wg sync.WaitGroup
+	errs := make([]error, n)
+	for i := range n {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			o := newSDKOrchestrator(fn)
+			_, errs[i] = o.runClaudeSDK(context.Background(), fmt.Sprintf("prompt-%d", i), t.TempDir(), true)
+		}(i)
+	}
+	wg.Wait()
+	for i, err := range errs {
+		if err != nil {
+			t.Errorf("goroutine %d: %v", i, err)
+		}
 	}
 }
 

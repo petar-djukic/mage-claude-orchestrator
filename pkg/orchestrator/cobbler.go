@@ -18,7 +18,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	claudesdk "github.com/schlunsen/claude-agent-sdk-go"
 	claudetypes "github.com/schlunsen/claude-agent-sdk-go/types"
 	"gopkg.in/yaml.v3"
 )
@@ -786,7 +785,7 @@ func (o *Orchestrator) runClaudeSDK(ctx context.Context, prompt, workDir string,
 	oldVal, hadVal := os.LookupEnv("CLAUDECODE")
 	_ = os.Unsetenv("CLAUDECODE")
 
-	msgChan, err := claudesdk.Query(ctx, prompt, opts)
+	msgChan, err := o.sdkQueryFn(ctx, prompt, opts)
 
 	// Restore CLAUDECODE as soon as the subprocess is launched (Query is
 	// synchronous up to subprocess start; channel reads happen after unlock).

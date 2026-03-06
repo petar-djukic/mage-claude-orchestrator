@@ -110,6 +110,26 @@ func Status() error { return newOrch().CodeStatus() }
 // Tag creates a documentation release tag (v0.YYYYMMDD.N) and builds the container image.
 func Tag() error { return newOrch().Tag() }
 
+// --- Release targets ---
+
+// Release groups targets that manage release lifecycle state in road-map.yaml
+// and configuration.yaml.
+type Release mg.Namespace
+
+// Tag creates a documentation release tag (v0.YYYYMMDD.N) and builds the
+// container image. Alias of the top-level Tag target, exposed under the
+// Release namespace for discoverability.
+func (Release) Tag() error { return newOrch().Tag() }
+
+// Update marks a release complete: sets all use-case statuses to "implemented"
+// in docs/road-map.yaml and removes the version from project.releases in
+// configuration.yaml. Errors if the release version is not found.
+func (Release) Update(version string) error { return newOrch().ReleaseUpdate(version) }
+
+// Clear reverses Update: resets use-case statuses to "spec_complete" and
+// re-adds the version to project.releases. Errors if the version is not found.
+func (Release) Clear(version string) error { return newOrch().ReleaseClear(version) }
+
 // --- Scaffold targets ---
 
 // Push scaffolds the orchestrator into a target Go repository. The argument

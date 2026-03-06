@@ -696,12 +696,25 @@ func (o *Orchestrator) buildPodmanCmd(ctx context.Context, workDir string, extra
 // directly on the host, without a podman container. The working directory
 // is set on the command so Claude Code operates within the correct project
 // root. No volume mounts or image selection are involved.
+//
+// CLAUDECODE is stripped from the environment so that claude can start even
+// when the caller is itself running inside a Claude Code session. Without this,
+// claude detects the nested session and exits with status 1.
 func (o *Orchestrator) buildDirectCmd(ctx context.Context, workDir string, extraClaudeArgs ...string) *exec.Cmd {
 	args := append([]string{}, o.cfg.Claude.Args...)
 	args = append(args, extraClaudeArgs...)
 	logf("runClaude: exec %s %v (mode=cli timeout=%s)", binClaude, args, o.cfg.ClaudeTimeout())
 	cmd := exec.CommandContext(ctx, binClaude, args...)
 	cmd.Dir = workDir
+	// Inherit the full environment but remove CLAUDECODE so that the claude
+	// subprocess does not see itself as nested inside another Claude session.
+	filtered := make([]string, 0, len(os.Environ()))
+	for _, e := range os.Environ() {
+		if !strings.HasPrefix(e, "CLAUDECODE=") {
+			filtered = append(filtered, e)
+		}
+	}
+	cmd.Env = filtered
 	return cmd
 }
 

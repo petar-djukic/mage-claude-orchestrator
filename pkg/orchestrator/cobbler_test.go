@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1747,6 +1748,80 @@ func TestRunClaudeSDK_ConcurrentCalls_Race(t *testing.T) {
 		if err != nil {
 			t.Errorf("goroutine %d: %v", i, err)
 		}
+	}
+}
+
+// --- filterSDKStderr ---
+
+func TestFilterSDKStderr_RateLimitWarningReplaced(t *testing.T) {
+	t.Parallel()
+	inR, inW, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	outR, outW, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+
+	// Write the SDK rate-limit warning and a normal line to the input pipe.
+	input := "[SDK WARNING] Failed to parse message from CLI: unknown message type (type: rate_limit_event)\n" +
+		"[cobbler] some other log line\n"
+	if _, err := inW.WriteString(input); err != nil {
+		t.Fatal(err)
+	}
+	inW.Close()
+
+	go filterSDKStderr(inR, outW, done)
+	<-done
+	outW.Close()
+
+	out, err := io.ReadAll(outR)
+	if err != nil {
+		t.Fatal(err)
+	}
+	outStr := string(out)
+	if strings.Contains(outStr, "[SDK WARNING]") {
+		t.Errorf("filterSDKStderr: SDK WARNING should be suppressed, got: %q", outStr)
+	}
+	if !strings.Contains(outStr, "claude: rate_limit") {
+		t.Errorf("filterSDKStderr: expected 'claude: rate_limit' in output, got: %q", outStr)
+	}
+	if !strings.Contains(outStr, "some other log line") {
+		t.Errorf("filterSDKStderr: other log lines should pass through, got: %q", outStr)
+	}
+}
+
+func TestFilterSDKStderr_OtherWarningsPassThrough(t *testing.T) {
+	t.Parallel()
+	inR, inW, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	outR, outW, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+
+	// A different SDK warning (not rate_limit_event) must not be suppressed.
+	input := "[SDK WARNING] Failed to parse message from CLI: unknown message type (type: some_other_event)\n"
+	if _, err := inW.WriteString(input); err != nil {
+		t.Fatal(err)
+	}
+	inW.Close()
+
+	go filterSDKStderr(inR, outW, done)
+	<-done
+	outW.Close()
+
+	out, err := io.ReadAll(outR)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(out), "[SDK WARNING]") {
+		t.Errorf("filterSDKStderr: non-rate-limit warnings should pass through, got: %q", string(out))
 	}
 }
 

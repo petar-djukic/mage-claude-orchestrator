@@ -198,14 +198,15 @@ type CobblerConfig struct {
 	MaxContextBytes int `yaml:"max_context_bytes"`
 
 	// EnforceMeasureValidation enables strict validation of measure output.
-	// When true, issues that violate P9 granularity ranges or P7 file naming
-	// are rejected and measure retries. When false (default), violations are
-	// logged as advisory warnings and import proceeds.
-	EnforceMeasureValidation bool `yaml:"enforce_measure_validation"`
+	// When true (default), issues that violate P9 granularity ranges or P7
+	// file naming are rejected and measure retries up to MaxMeasureRetries
+	// times. Set to false to revert to advisory-only behavior where violations
+	// are logged but import proceeds.
+	EnforceMeasureValidation *bool `yaml:"enforce_measure_validation"`
 
 	// MaxMeasureRetries is the maximum number of retry attempts per iteration
-	// when EnforceMeasureValidation rejects the output. When 0 (default),
-	// no retries are attempted. A value of 2-3 is recommended.
+	// when EnforceMeasureValidation rejects the output. Defaults to 2.
+	// Set to 0 to disable retries (enforcement still applies on the first try).
 	MaxMeasureRetries int `yaml:"max_measure_retries"`
 
 	// MaxRequirementsPerTask is the maximum number of requirements a single
@@ -392,6 +393,16 @@ func (c *CobblerConfig) effectiveMeasureExcludeTests() bool {
 	return *c.MeasureExcludeTests
 }
 
+// EffectiveEnforceMeasureValidation returns whether P9/P7 measure validation
+// is enforced. Nil (field absent in YAML) defaults to true; an explicit false
+// reverts to advisory-only behavior.
+func (c *CobblerConfig) EffectiveEnforceMeasureValidation() bool {
+	if c.EnforceMeasureValidation == nil {
+		return true
+	}
+	return *c.EnforceMeasureValidation
+}
+
 // DefaultConfig returns a Config populated with all default values.
 // Project-specific fields (ModulePath, BinaryName, etc.) are left empty;
 // the caller fills them in or the user edits the generated file.
@@ -399,7 +410,7 @@ func DefaultConfig() Config {
 	t := true
 	cfg := Config{
 		Claude:  ClaudeConfig{SilenceAgent: &t},
-		Cobbler: CobblerConfig{MeasureExcludeTests: &t},
+		Cobbler: CobblerConfig{MeasureExcludeTests: &t, EnforceMeasureValidation: &t},
 	}
 	cfg.applyDefaults()
 	return cfg
@@ -510,6 +521,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Cobbler.IdleTimeoutSeconds == 0 {
 		c.Cobbler.IdleTimeoutSeconds = 60
+	}
+	if c.Cobbler.MaxMeasureRetries == 0 {
+		c.Cobbler.MaxMeasureRetries = 2
 	}
 	if c.Claude.MaxTimeSec == 0 {
 		c.Claude.MaxTimeSec = 300

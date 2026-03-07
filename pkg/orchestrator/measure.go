@@ -603,7 +603,7 @@ func (o *Orchestrator) importIssuesImpl(yamlFile, repo, generation string, skipE
 	if len(vr.Warnings) > 0 {
 		logf("importIssues: %d warning(s)", len(vr.Warnings))
 	}
-	if vr.HasErrors() && o.cfg.Cobbler.EnforceMeasureValidation && !skipEnforcement {
+	if vr.HasErrors() && o.cfg.Cobbler.EffectiveEnforceMeasureValidation() && !skipEnforcement {
 		return nil, vr.Errors, fmt.Errorf("measure validation failed (%d error(s)): %s",
 			len(vr.Errors), strings.Join(vr.Errors, "; "))
 	}

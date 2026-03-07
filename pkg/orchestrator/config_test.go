@@ -243,7 +243,7 @@ func TestLoadConfig_EnforceMeasureValidationFromYAML(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
 	}
-	if !cfg.Cobbler.EnforceMeasureValidation {
+	if !cfg.Cobbler.EffectiveEnforceMeasureValidation() {
 		t.Error("EnforceMeasureValidation: got false, want true")
 	}
 	if cfg.Cobbler.MaxMeasureRetries != 3 {
@@ -251,17 +251,31 @@ func TestLoadConfig_EnforceMeasureValidationFromYAML(t *testing.T) {
 	}
 }
 
-func TestLoadConfig_EnforceMeasureValidationDefaultsFalse(t *testing.T) {
+func TestLoadConfig_EnforceMeasureValidationDefaultsTrue(t *testing.T) {
 	f := writeTemp(t, "project:\n  module_path: example.com/x\n")
 	cfg, err := LoadConfig(f)
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
 	}
-	if cfg.Cobbler.EnforceMeasureValidation {
-		t.Error("EnforceMeasureValidation default: got true, want false")
+	if !cfg.Cobbler.EffectiveEnforceMeasureValidation() {
+		t.Error("EnforceMeasureValidation default: got false, want true")
 	}
-	if cfg.Cobbler.MaxMeasureRetries != 0 {
-		t.Errorf("MaxMeasureRetries default: got %d, want 0", cfg.Cobbler.MaxMeasureRetries)
+	if cfg.Cobbler.MaxMeasureRetries != 2 {
+		t.Errorf("MaxMeasureRetries default: got %d, want 2", cfg.Cobbler.MaxMeasureRetries)
+	}
+}
+
+func TestLoadConfig_EnforceMeasureValidationExplicitFalse(t *testing.T) {
+	yaml := `cobbler:
+  enforce_measure_validation: false
+`
+	f := writeTemp(t, yaml)
+	cfg, err := LoadConfig(f)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.Cobbler.EffectiveEnforceMeasureValidation() {
+		t.Error("EnforceMeasureValidation explicit false: got true, want false")
 	}
 }
 

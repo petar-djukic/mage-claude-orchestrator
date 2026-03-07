@@ -1255,7 +1255,6 @@ acceptance_criteria:
 
 	cfg := Config{}
 	cfg.Cobbler.Dir = dir
-	cfg.Cobbler.EnforceMeasureValidation = true
 	o := New(cfg)
 
 	_, validationErrs, err := o.importIssuesImpl(yamlFile, "owner/repo", "gen", false, 0)
@@ -1293,7 +1292,6 @@ acceptance_criteria:
 
 	cfg := Config{}
 	cfg.Cobbler.Dir = dir
-	cfg.Cobbler.EnforceMeasureValidation = true
 	o := New(cfg)
 
 	// skipEnforcement=true should bypass validation errors.

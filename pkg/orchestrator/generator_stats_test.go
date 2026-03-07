@@ -21,6 +21,12 @@ func TestParseStitchComment_Completed(t *testing.T) {
 	if d.durationS != 5*60+32 {
 		t.Errorf("durationS = %d, want %d", d.durationS, 5*60+32)
 	}
+	if d.locDeltaProd != 45 {
+		t.Errorf("locDeltaProd = %d, want 45", d.locDeltaProd)
+	}
+	if d.locDeltaTest != 17 {
+		t.Errorf("locDeltaTest = %d, want 17", d.locDeltaTest)
+	}
 }
 
 func TestParseStitchComment_Failed(t *testing.T) {
@@ -56,6 +62,24 @@ func TestParseStitchComment_WithTurns(t *testing.T) {
 	}
 	if d.costUSD != 0.55 {
 		t.Errorf("costUSD = %v, want 0.55", d.costUSD)
+	}
+	if d.locDeltaProd != 20 {
+		t.Errorf("locDeltaProd = %d, want 20", d.locDeltaProd)
+	}
+	if d.locDeltaTest != 10 {
+		t.Errorf("locDeltaTest = %d, want 10", d.locDeltaTest)
+	}
+}
+
+func TestParseStitchComment_NegativeLOC(t *testing.T) {
+	t.Parallel()
+	body := "Stitch completed in 1m 5s. LOC delta: -12 prod, +30 test. Cost: $0.20. Turns: 5."
+	d := parseStitchComment(body)
+	if d.locDeltaProd != -12 {
+		t.Errorf("locDeltaProd = %d, want -12", d.locDeltaProd)
+	}
+	if d.locDeltaTest != 30 {
+		t.Errorf("locDeltaTest = %d, want 30", d.locDeltaTest)
 	}
 }
 

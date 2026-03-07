@@ -16,12 +16,14 @@ import (
 // generatorIssueStats holds per-issue stats derived from labels and comments.
 type generatorIssueStats struct {
 	cobblerIssue
-	status    string  // "done", "failed", "in-progress", "pending"
-	costUSD   float64
-	durationS int
-	numTurns  int
-	prds      []string
-	release   string // roadmap release version, e.g. "01.0"
+	status       string  // "done", "failed", "in-progress", "pending"
+	costUSD      float64
+	durationS    int
+	numTurns     int
+	locDeltaProd int
+	locDeltaTest int
+	prds         []string
+	release      string // roadmap release version, e.g. "01.0"
 }
 
 // GeneratorStats prints a status report for the current generation run.
@@ -57,7 +59,7 @@ func (o *Orchestrator) GeneratorStats() error {
 	// Collect per-issue stats.
 	rows := make([]generatorIssueStats, 0, len(issues))
 	var totalCost float64
-	var totalTurns int
+	var totalTurns, totalLocProd, totalLocTest int
 	var nDone, nFailed, nInProgress, nPending int
 	prdStatus := make(map[string]string) // prd name → highest-priority status
 	prdReleaseMap := buildPRDReleaseMap()
@@ -93,9 +95,13 @@ func (o *Orchestrator) GeneratorStats() error {
 			if p.numTurns > 0 {
 				s.numTurns += p.numTurns
 			}
+			s.locDeltaProd += p.locDeltaProd
+			s.locDeltaTest += p.locDeltaTest
 		}
 		totalCost += s.costUSD
 		totalTurns += s.numTurns
+		totalLocProd += s.locDeltaProd
+		totalLocTest += s.locDeltaTest
 
 		// Extract PRD references, resolve release, and track coverage.
 		s.prds = extractPRDRefs(iss.Title + " " + iss.Description)
@@ -136,6 +142,7 @@ func (o *Orchestrator) GeneratorStats() error {
 	}
 	fmt.Println()
 	fmt.Printf("Total cost: $%.2f, %d turns\n", totalCost, totalTurns)
+	fmt.Printf("LOC created: %+d prod, %+d test\n", totalLocProd, totalLocTest)
 
 	// Per-release breakdown.
 	type relCounts struct{ done, inProgress, pending, failed int }
@@ -180,7 +187,7 @@ func (o *Orchestrator) GeneratorStats() error {
 
 	// Issue table.
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "#\tIdx\tStatus\tRel\tCost\tDuration\tTurns\tTitle")
+	fmt.Fprintln(w, "#\tIdx\tStatus\tRel\tCost\tDuration\tTurns\tProd\tTest\tTitle")
 	for _, r := range rows {
 		cost := "-"
 		if r.costUSD > 0 {
@@ -194,6 +201,14 @@ func (o *Orchestrator) GeneratorStats() error {
 		if r.numTurns > 0 {
 			turns = strconv.Itoa(r.numTurns)
 		}
+		prod := "-"
+		if r.locDeltaProd != 0 {
+			prod = fmt.Sprintf("%+d", r.locDeltaProd)
+		}
+		test := "-"
+		if r.locDeltaTest != 0 {
+			test = fmt.Sprintf("%+d", r.locDeltaTest)
+		}
 		rel := r.release
 		if rel == "" {
 			rel = "-"
@@ -202,8 +217,8 @@ func (o *Orchestrator) GeneratorStats() error {
 		if len(title) > 48 {
 			title = title[:45] + "..."
 		}
-		fmt.Fprintf(w, "%d\t%d\t%s\t%s\t%s\t%s\t%s\t%s\n",
-			r.Number, r.Index, r.status, rel, cost, dur, turns, title)
+		fmt.Fprintf(w, "%d\t%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+			r.Number, r.Index, r.status, rel, cost, dur, turns, prod, test, title)
 	}
 	if err := w.Flush(); err != nil {
 		return err
@@ -249,9 +264,11 @@ func (o *Orchestrator) GeneratorStats() error {
 
 // stitchCommentData holds metrics extracted from a stitch progress comment.
 type stitchCommentData struct {
-	costUSD   float64
-	durationS int
-	numTurns  int
+	costUSD      float64
+	durationS    int
+	numTurns     int
+	locDeltaProd int
+	locDeltaTest int
 }
 
 // parseStitchComment extracts cost and duration from a stitch progress comment
@@ -270,6 +287,16 @@ func parseStitchComment(body string) stitchCommentData {
 		costStr = strings.TrimRight(costStr, ".,;")
 		if v, err := strconv.ParseFloat(costStr, 64); err == nil {
 			d.costUSD = v
+		}
+	}
+
+	// Parse "LOC delta: +N prod, +N test"
+	if i := strings.Index(body, "LOC delta: "); i >= 0 {
+		rest := body[i+11:]
+		var prod, test int
+		if n, _ := fmt.Sscanf(rest, "%d prod, %d test", &prod, &test); n == 2 {
+			d.locDeltaProd = prod
+			d.locDeltaTest = test
 		}
 	}
 

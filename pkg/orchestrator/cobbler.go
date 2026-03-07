@@ -4,6 +4,7 @@
 package orchestrator
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -50,6 +51,36 @@ type LocSnapshot struct {
 // unset CLAUDECODE at the process level before calling Query. The mutex
 // prevents concurrent calls from interleaving the unset/restore sequence.
 var sdkEnvMu sync.Mutex
+
+// sdkStderrMu serialises os.Stderr replacement in runClaudeSDK.
+// The SDK transport writes rate-limit warnings directly to os.Stderr via its
+// internal logger. We redirect os.Stderr through a filter pipe for the full
+// duration of each SDK call so those warnings can be replaced with a clean
+// operator-facing log entry. The mutex prevents concurrent redirects from
+// interfering with each other.
+var sdkStderrMu sync.Mutex
+
+// filterSDKStderr reads lines from r and forwards them to dst, except that
+// lines matching the SDK's rate-limit parse warning are replaced with a
+// structured log entry. It closes r and signals done when r reaches EOF.
+// Write directly to dst (not via logf) to avoid writing back into the pipe.
+func filterSDKStderr(r *os.File, dst *os.File, done chan<- struct{}) {
+	defer func() {
+		_ = r.Close()
+		close(done)
+	}()
+	sc := bufio.NewScanner(r)
+	for sc.Scan() {
+		line := sc.Text()
+		if strings.Contains(line, "Failed to parse message from CLI") &&
+			strings.Contains(line, "rate_limit_event") {
+			ts := time.Now().Format(time.RFC3339)
+			fmt.Fprintf(dst, "[%s] claude: rate_limit\n", ts)
+			continue
+		}
+		fmt.Fprintln(dst, line)
+	}
+}
 
 // captureLOC returns the current Go LOC counts. Errors are swallowed
 // because stats collection is best-effort.
@@ -799,9 +830,39 @@ func (o *Orchestrator) runClaudeSDK(ctx context.Context, prompt, workDir string,
 		}
 	}
 
+	start := time.Now()
+
+	// Redirect os.Stderr through a filter pipe for the full duration of this
+	// call. The SDK transport writes rate_limit_event warnings directly to
+	// os.Stderr via its internal logger (not surfaced through the message
+	// channel). filterSDKStderr replaces those warnings with a structured log
+	// entry and forwards all other lines to the original stderr unchanged.
+	// sdkStderrMu serialises concurrent calls so redirects do not interleave.
+	// The lock must be acquired before any logf call to prevent a data race on
+	// os.Stderr between the redirect write and logf's read.
+	sdkStderrMu.Lock()
+	origStderr := os.Stderr
+	pr, pw, pipeErr := os.Pipe()
+	if pipeErr == nil {
+		os.Stderr = pw
+	}
+	stderrDone := make(chan struct{})
+	if pipeErr == nil {
+		go filterSDKStderr(pr, origStderr, stderrDone)
+	}
+	// Log after os.Stderr is redirected so the message flows through the filter.
 	logf("runClaude: SDK query workDir=%q (timeout=%s)", workDir, o.cfg.ClaudeTimeout())
 
-	start := time.Now()
+	// Cleanup: restore stderr and drain the filter goroutine after the call.
+	// Defined here so all return paths below trigger it via the defer.
+	defer func() {
+		if pipeErr == nil {
+			pw.Close()
+			<-stderrDone
+			os.Stderr = origStderr
+		}
+		sdkStderrMu.Unlock()
+	}()
 
 	// The SDK calls os.Environ() when constructing the subprocess env, so
 	// opts.Env["CLAUDECODE"]="" would merely append after CLAUDECODE=1 already

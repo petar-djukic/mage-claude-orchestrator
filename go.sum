@@ -1,5 +1,3 @@
-github.com/petar-djukic/sdd-hello-world v0.20260306.1 h1:GWukg6r/MLmKbJ7asF92zBtkiH9A08XSorAS3XpDW+E=
-github.com/petar-djukic/sdd-hello-world v0.20260306.1/go.mod h1:oC+U33XqVDEwP+E5L3AdPIYqVE3xda+/4rfwSrdw9XM=
 github.com/schlunsen/claude-agent-sdk-go v0.5.1 h1:8hho5wd5XU87q91ssEFeJmgS0whm6JTroqtwnaUQxcA=
 github.com/schlunsen/claude-agent-sdk-go v0.5.1/go.mod h1:bH59LsKvDqUtYzW+6MNoaFEjcpMtfdvRNjQDCyfBJ+o=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405 h1:yhCVgyC4o1eVCa2tZl7eS0r+SDo693bJlVdllGtEeKM=
